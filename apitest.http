@@ -1,0 +1,26 @@
+
+GET http://localhost:8080/devices/erer HTTP/1.1
+
+###
+
+GET http://localhost:8080/devices/000000007920365b HTTP/1.1
+
+###
+
+POST http://localhost:8080/devices/000000007920365b?lock=true HTTP/1.1
+Content-Type: application/json
+
+###
+
+POST http://localhost:8080/devices/000000007920365b?lock=false HTTP/1.1
+Content-Type: application/json
+
+###
+
+POST http://localhost:8080/devices/000000007920365b?black=true HTTP/1.1
+Content-Type: application/json
+
+###
+
+POST http://localhost:8080/devices/000000007920365b?black=false HTTP/1.1
+Content-Type: application/json
