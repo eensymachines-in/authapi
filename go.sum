@@ -5,6 +5,8 @@ github.com/eensymachines-in/auth v0.0.0-20210112005653-0c9bf72870ce h1:SPQOu7aQD
 github.com/eensymachines-in/auth v0.0.0-20210112005653-0c9bf72870ce/go.mod h1:3nkj1JvMiNeveEZvQpbyGzhqbPMSniNGWmJu126DGkM=
 github.com/eensymachines-in/auth v0.0.0-20210126115739-4ef8ed6598ce h1:LsjTYPti9k9JGgy9f7jXy8VYZOu+A3d/QEEbD6D5wE8=
 github.com/eensymachines-in/auth v0.0.0-20210126115739-4ef8ed6598ce/go.mod h1:ZNkdD+vhDf+Is3XlF+5/ZL160HkXlBcJgNeGMTFx+3g=
+github.com/eensymachines-in/auth v0.0.0-20210127082502-0d3b330b178e h1:bFulq2npSiiLvRIbckKAaaIGtUjX127tYSDO4XkBBV8=
+github.com/eensymachines-in/auth v0.0.0-20210127082502-0d3b330b178e/go.mod h1:ZNkdD+vhDf+Is3XlF+5/ZL160HkXlBcJgNeGMTFx+3g=
 github.com/eensymachines-in/utilities v1.0.2-0.20210121125932-f4bdcb85430a/go.mod h1:uraqkydvY9NpQzdbYQkP+HyPI1ZnMirwieSHcg1iTcU=
 github.com/gin-contrib/sse v0.1.0 h1:Y/yl/+YNO8GZSjAhjMsSuLt29uWRFHdHYUb5lYOV9qE=
 github.com/gin-contrib/sse v0.1.0/go.mod h1:RHrZQHXnP2xjPF+u1gW/2HnVO7nvIa9PG3Gm+fLHvGI=

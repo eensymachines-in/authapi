@@ -36,7 +36,7 @@ func handlDevices(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, status) // we have the device status, we are 200OK here
 		return
-	} else if c.Request.Method == "POST" {
+	} else if c.Request.Method == "PATCH" {
 		// modification to device status
 		lock := c.Query("lock")
 		black := c.Query("black")
@@ -142,6 +142,6 @@ func main() {
 	devices := r.Group("/devices")
 	devices.Use(lclDbConnect())
 	devices.GET("/:serial", handlDevices)
-	devices.POST("/:serial", handlDevices)
+	devices.PATCH("/:serial", handlDevices)
 	log.Fatal(r.Run(":8080"))
 }
