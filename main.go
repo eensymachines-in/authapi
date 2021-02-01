@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/eensymachines-in/auth"
 	"github.com/gin-gonic/gin"
@@ -12,83 +11,90 @@ import (
 	"gopkg.in/mgo.v2"
 )
 
-// handlDevices : handler for the route /devices
-func handlDevices(c *gin.Context) {
+// hndlUsers : handler for user acocunts as a collection and not specifc user
+func hndlUsers(c *gin.Context) {
 	closeSession, _ := c.Get("close_session")
 	defer closeSession.(func())() // this closes the db session when done
-	devregColl, _ := c.Get("devreg")
-	blcklColl, _ := c.Get("devblacklist")
-	serial := c.Param("serial")
-	if c.Request.Method == "GET" {
-		// this is when we are trying to get the device registration of a specific device
-		status, err := devregColl.(*auth.DeviceRegColl).DeviceOfSerial(serial)
-		if err != nil {
-			// Failed query to get the device by the serial
-			log.Errorf("Failed DeviceOfSerial, could not get device of serial: %s", err)
-			c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("Failed to get device with serial %s", serial))
+	userreg, _ := c.Get("userreg")
+	ua, _ := userreg.(*auth.UserAccounts)
+	if c.Request.Method == "POST" {
+		// post request works on not the specific account but list of all accounts
+		userAccount := &auth.UserAccDetails{}
+		if c.ShouldBindJSON(userAccount) != nil {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be inserted"))
 			return
 		}
-		if *status == (auth.DeviceStatus{}) {
-			// which means the serial number wasnt found as we have an empty result
-			log.Errorf("No deice with serial: %s found registered", serial)
-			c.AbortWithError(http.StatusNotFound, fmt.Errorf("No deice with serial: %s found registered", serial))
-			return
-		}
-		c.JSON(http.StatusOK, status) // we have the device status, we are 200OK here
-		return
-	} else if c.Request.Method == "PATCH" {
-		// modification to device status
-		lock := c.Query("lock")
-		black := c.Query("black")
-		if lock != "" {
-			value, err := strconv.ParseBool(lock) // lock param is to be a boolean
-			if err != nil {
-				log.Errorf("Lock status is invalid, expecting a bool value, got :%v", lock)
-				c.AbortWithError(http.StatusBadRequest, fmt.Errorf("check lock status, in the query params"))
+		if err := ua.InsertAccount(userAccount); err != nil {
+			if _, ok := err.(auth.ErrInvalid); ok {
+				c.AbortWithError(http.StatusBadRequest, err)
 				return
-			}
-			if value {
-				if err := devregColl.(*auth.DeviceRegColl).LockDevice(serial); err != nil {
-					log.Errorf("Failed to lock device :%s", err)
-					c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("Failed to lock device, one or more operations on the server failed"))
-					return
-				}
-			} else {
-				if err := devregColl.(*auth.DeviceRegColl).UnLockDevice(serial); err != nil {
-					log.Errorf("Failed to unlock device :%s", err)
-					c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("Failed to unlock device, one or more operations on the server failed"))
-					return
-				}
-			}
-		}
-		if black != "" {
-			// when the device needs to be blacklisted or whitelisted
-			value, err := strconv.ParseBool(black) //since the qparam is to be a boolean
-			if err != nil {
-				log.Errorf("Black status is invalid, expecting a bool value, got :%v", black)
-				c.AbortWithError(http.StatusBadRequest, fmt.Errorf("check black status, in the query params"))
+			} else if _, ok := err.(auth.ErrDuplicate); ok {
+				c.AbortWithError(http.StatusBadRequest, err)
 				return
-			}
-			if value {
-				// device needs to be black listed
-				if err := blcklColl.(*auth.BlacklistColl).Black(&auth.Blacklist{Serial: serial, Reason: "Test change in the blacklist"}); err != nil {
-					log.Errorf("Failed to blacklist device :%s", err)
-					c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("Failed to lock device, one or more operations on the server failed"))
-					return
-				}
-			} else {
-				// the device needs to be whitelisted
-				if err := blcklColl.(*auth.BlacklistColl).White(serial); err != nil {
-					log.Errorf("Failed to unblock device :%s", err)
-					c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("Failed to unblack device, one or more operations on the server failed"))
-					return
-				}
+			} else if _, ok := err.(auth.ErrQueryFailed); ok {
+				c.AbortWithError(http.StatusBadGateway, err)
+				return
 			}
 		}
 		c.AbortWithStatus(http.StatusOK)
 		return
 	}
-
+}
+func handlUser(c *gin.Context) {
+	closeSession, _ := c.Get("close_session")
+	defer closeSession.(func())() // this closes the db session when done
+	userreg, _ := c.Get("userreg")
+	ua, _ := userreg.(*auth.UserAccounts)
+	email := c.Param("email")
+	if c.Request.Method == "GET" {
+		// Getting details of the user account
+		details, err := ua.AccountDetails(email)
+		if err != nil {
+			if _, ok := err.(auth.ErrInvalid); ok {
+				c.AbortWithError(http.StatusBadRequest, err)
+				return
+			} else if _, ok := err.(auth.ErrNotFound); ok {
+				c.AbortWithError(http.StatusBadRequest, err)
+				return
+			} else if _, ok := err.(auth.ErrQueryFailed); ok {
+				c.AbortWithError(http.StatusBadGateway, err)
+				return
+			}
+		}
+		log.Info(details)
+		c.JSON(http.StatusOK, details)
+		return
+	} else if c.Request.Method == "DELETE" {
+		if err := ua.RemoveAccount(email); err != nil {
+			c.AbortWithError(http.StatusBadGateway, err)
+			return
+		}
+		c.AbortWithStatus(http.StatusOK)
+		return
+	} else if c.Request.Method == "PUT" {
+		// changing all the account details given the email id
+		// IMP: this does not change the password of the account,
+		// to change the password use the patch verb
+		newDetails := &auth.UserAccDetails{}
+		if c.ShouldBindJSON(newDetails) != nil {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be updated"))
+			return
+		}
+		if err := ua.UpdateAccDetails(newDetails); err != nil {
+			if _, ok := err.(auth.ErrNotFound); ok {
+				c.AbortWithError(http.StatusBadRequest, err)
+				return
+			} else if _, ok := err.(auth.ErrQueryFailed); ok {
+				c.AbortWithError(http.StatusBadGateway, err)
+				return
+			} else {
+				c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("Unknown error on the server"))
+				return
+			}
+		}
+		c.AbortWithStatus(http.StatusOK)
+		return
+	}
 }
 
 // this one adds database collections to the context
@@ -111,6 +117,7 @@ func lclDbConnect() gin.HandlerFunc {
 			return
 		}
 		c.Set("devreg", &auth.DeviceRegColl{Collection: coll})
+
 		coll = session.DB("autolumin").C("devblacklist")
 		if coll == nil {
 			log.Error("Failed to get collection - 'devblacklist'")
@@ -118,6 +125,15 @@ func lclDbConnect() gin.HandlerFunc {
 			return
 		}
 		c.Set("devblacklist", &auth.BlacklistColl{Collection: coll})
+		// User account registration acocunt
+		coll = session.DB("autolumin").C("userreg")
+		if coll == nil {
+			log.Error("Failed to get collection - 'userreg'")
+			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed database collection connection"))
+			return
+		}
+		c.Set("userreg", &auth.UserAccounts{Collection: coll})
+		// session close callback
 		c.Set("close_session", closeSession)
 		return
 	}
@@ -139,9 +155,22 @@ func main() {
 			"message": "pong",
 		})
 	})
+	// devices group
 	devices := r.Group("/devices")
 	devices.Use(lclDbConnect())
-	devices.GET("/:serial", handlDevices)
-	devices.PATCH("/:serial", handlDevices)
+
+	devices.POST("", handlDevices)          // when creating new registrations
+	devices.GET("/:serial", handlDevices)   // when getting existing registrations
+	devices.PATCH("/:serial", handlDevices) // when modifying existing registration
+
+	// Users group
+	users := r.Group("/users")
+	users.Use(lclDbConnect())
+
+	users.POST("", hndlUsers)
+	users.GET("/:email", handlUser)
+	users.DELETE("/:email", handlUser)
+	users.PUT("/:email", handlUser)
+
 	log.Fatal(r.Run(":8080"))
 }

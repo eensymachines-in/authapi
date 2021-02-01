@@ -2,26 +2,35 @@ version: '3.1'
 
 services:
     srvmongo:
-        image: mongo:4.2-bionic
-        restart: always
-        ports:
-            - 37017:27017
-        # environment:
-        #   MONGO_INITDB_ROOT_USERNAME: root
-        #   MONGO_INITDB_ROOT_PASSWORD: example
-        #   ME_CONFIG_MONGODB_ADMINUSERNAME: admin
-        tty: true
-        stdin_open: true
-        container_name: lumin_mongo
+      image: mongo:4.2-bionic
+      ports:
+          - 37017:27017
+      # environment:
+      #   MONGO_INITDB_ROOT_USERNAME: root
+      #   MONGO_INITDB_ROOT_PASSWORD: example
+      #   ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      tty: true
+      stdin_open: true
+      container_name: lumin_mongo
+    srvredis:
+      image: redis:6.0
+      ports:
+        - 6379:6379
+      tty: true
+      stdin_open: true
+      container_name: redis_cache
+      volumes: 
+        - "/data:/data" # this is where redis will store its AOF appendonly file for persistence
     srvlumin:
-        build: .
-        volumes:
-          - .:/root/go/src/app
-        ports:
-          - 8080:8080
-        stdin_open: true
-        tty:  true
-        links:
-          - "srvmongo"
-        container_name: lumin_api
-        entrypoint: ["go", "run", "main.go"]
+      build: .
+      volumes:
+        - .:/root/go/src/app
+      ports:
+        - 8080:8080
+      stdin_open: true
+      tty:  true
+      links:
+        - "srvmongo"
+        - "srvredis"
+      container_name: lumin_api
+      entrypoint: ["go", "run", "main.go"]
