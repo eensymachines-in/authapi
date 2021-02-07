@@ -18,7 +18,7 @@ services:
         - 6379:6379
       tty: true
       stdin_open: true
-      container_name: redis_cache
+      container_name: lumin_cache
       volumes: 
         - "/data:/data" # this is where redis will store its AOF appendonly file for persistence
     srvlumin:
@@ -33,4 +33,4 @@ services:
         - "srvmongo"
         - "srvredis"
       container_name: lumin_api
-      entrypoint: ["go", "run", "main.go"]
+      entrypoint: ["go", "run", "."]

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/eensymachines-in/auth"
+	ex "github.com/eensymachines-in/errx"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
@@ -20,10 +21,7 @@ func handlDevices(c *gin.Context) {
 	if c.Request.Method == "GET" {
 		// this is when we are trying to get the device registration of a specific device
 		status, err := devregColl.(*auth.DeviceRegColl).DeviceOfSerial(serial)
-		if err != nil {
-			// Failed query to get the device by the serial
-			log.Errorf("Failed DeviceOfSerial, could not get device of serial: %s", err)
-			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed to get device with serial %s", serial))
+		if ex.DigestErr(err, c) != 0 {
 			return
 		}
 		if *status == (auth.DeviceStatus{}) {
@@ -40,29 +38,15 @@ func handlDevices(c *gin.Context) {
 		black := c.Query("black")
 		if lock != "" {
 			value, err := strconv.ParseBool(lock) // lock param is to be a boolean
-			if err != nil {
-				log.Errorf("Lock status is invalid, expecting a bool value, got :%v", lock)
-				c.AbortWithError(http.StatusBadRequest, fmt.Errorf("check lock status, in the query params"))
+			if ex.DigestErr(err, c) != 0 {
 				return
 			}
 			if value {
-				if err := devregColl.(*auth.DeviceRegColl).LockDevice(serial); err != nil {
-					log.Errorf("Failed to lock device :%s", err)
-					if _, ok := err.(auth.ErrQueryFailed); ok {
-						c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed to lock device, one or more operations on the server failed"))
-					} else if _, ok := err.(auth.ErrInvalid); ok {
-						c.AbortWithError(http.StatusBadRequest, err)
-					}
+				if ex.DigestErr(devregColl.(*auth.DeviceRegColl).LockDevice(serial), c) != 0 {
 					return
 				}
 			} else {
-				if err := devregColl.(*auth.DeviceRegColl).UnLockDevice(serial); err != nil {
-					log.Errorf("Failed to unlock device :%s", err)
-					if _, ok := err.(auth.ErrQueryFailed); ok {
-						c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed to unlock device, one or more operations on the server failed"))
-					} else if _, ok := err.(auth.ErrInvalid); ok {
-						c.AbortWithError(http.StatusBadRequest, err)
-					}
+				if ex.DigestErr(devregColl.(*auth.DeviceRegColl).UnLockDevice(serial), c) != 0 {
 					return
 				}
 			}
@@ -77,16 +61,12 @@ func handlDevices(c *gin.Context) {
 			}
 			if value {
 				// device needs to be black listed
-				if err := blcklColl.(*auth.BlacklistColl).Black(&auth.Blacklist{Serial: serial, Reason: "Test change in the blacklist"}); err != nil {
-					log.Errorf("Failed to blacklist device :%s", err)
-					c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed to lock device, one or more operations on the server failed"))
+				if ex.DigestErr(blcklColl.(*auth.BlacklistColl).Black(&auth.Blacklist{Serial: serial, Reason: "Test change in the blacklist"}), c) != 0 {
 					return
 				}
 			} else {
 				// the device needs to be whitelisted
-				if err := blcklColl.(*auth.BlacklistColl).White(serial); err != nil {
-					log.Errorf("Failed to unblock device :%s", err)
-					c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed to unblack device, one or more operations on the server failed"))
+				if ex.DigestErr(blcklColl.(*auth.BlacklistColl).White(serial), c) != 0 {
 					return
 				}
 			}
@@ -100,22 +80,7 @@ func handlDevices(c *gin.Context) {
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read device registration details, kindly check and send again"))
 			return
 		}
-		err := devregColl.(*auth.DeviceRegColl).InsertDeviceReg(devReg, blcklColl.(*auth.BlacklistColl).Collection)
-		if _, ok := err.(auth.ErrInvalid); ok {
-			log.Errorf("handlDevices: Failed to insert device registration %s", err)
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Invalid device registration details, kindly check and send again"))
-			return
-		} else if _, ok := err.(auth.ErrForbid); ok {
-			log.Errorf("handlDevices: Failed to insert device registration %s", err)
-			c.AbortWithError(http.StatusForbidden, fmt.Errorf("Device %s cannot be registered, it maybe black listed. Please contact administrator", devReg.Serial))
-			return
-		} else if _, ok := err.(auth.ErrDuplicate); ok {
-			log.Errorf("handlDevices: Failed to insert device registration %s", err)
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Device %s is already registered, cannot have 2 devices with the same serial registered again", devReg.Serial))
-			return
-		} else if _, ok := err.(auth.ErrQueryFailed); ok {
-			log.Errorf("handlDevices: Failed to insert device registration %s", err)
-			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Server operation failed while registering this device, please try again in sometime. If the problem persists you may have to contact an administrator"))
+		if ex.DigestErr(devregColl.(*auth.DeviceRegColl).InsertDeviceReg(devReg, blcklColl.(*auth.BlacklistColl).Collection), c) != 0 {
 			return
 		}
 		c.AbortWithStatus(http.StatusOK)

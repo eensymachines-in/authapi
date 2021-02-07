@@ -6,96 +6,11 @@ import (
 	"os"
 
 	"github.com/eensymachines-in/auth"
+	ex "github.com/eensymachines-in/errx"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/mgo.v2"
 )
-
-// hndlUsers : handler for user acocunts as a collection and not specifc user
-func hndlUsers(c *gin.Context) {
-	closeSession, _ := c.Get("close_session")
-	defer closeSession.(func())() // this closes the db session when done
-	userreg, _ := c.Get("userreg")
-	ua, _ := userreg.(*auth.UserAccounts)
-	if c.Request.Method == "POST" {
-		// post request works on not the specific account but list of all accounts
-		userAccount := &auth.UserAccDetails{}
-		if c.ShouldBindJSON(userAccount) != nil {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be inserted"))
-			return
-		}
-		if err := ua.InsertAccount(userAccount); err != nil {
-			if _, ok := err.(auth.ErrInvalid); ok {
-				c.AbortWithError(http.StatusBadRequest, err)
-				return
-			} else if _, ok := err.(auth.ErrDuplicate); ok {
-				c.AbortWithError(http.StatusBadRequest, err)
-				return
-			} else if _, ok := err.(auth.ErrQueryFailed); ok {
-				c.AbortWithError(http.StatusBadGateway, err)
-				return
-			}
-		}
-		c.AbortWithStatus(http.StatusOK)
-		return
-	}
-}
-func handlUser(c *gin.Context) {
-	closeSession, _ := c.Get("close_session")
-	defer closeSession.(func())() // this closes the db session when done
-	userreg, _ := c.Get("userreg")
-	ua, _ := userreg.(*auth.UserAccounts)
-	email := c.Param("email")
-	if c.Request.Method == "GET" {
-		// Getting details of the user account
-		details, err := ua.AccountDetails(email)
-		if err != nil {
-			if _, ok := err.(auth.ErrInvalid); ok {
-				c.AbortWithError(http.StatusBadRequest, err)
-				return
-			} else if _, ok := err.(auth.ErrNotFound); ok {
-				c.AbortWithError(http.StatusBadRequest, err)
-				return
-			} else if _, ok := err.(auth.ErrQueryFailed); ok {
-				c.AbortWithError(http.StatusBadGateway, err)
-				return
-			}
-		}
-		log.Info(details)
-		c.JSON(http.StatusOK, details)
-		return
-	} else if c.Request.Method == "DELETE" {
-		if err := ua.RemoveAccount(email); err != nil {
-			c.AbortWithError(http.StatusBadGateway, err)
-			return
-		}
-		c.AbortWithStatus(http.StatusOK)
-		return
-	} else if c.Request.Method == "PUT" {
-		// changing all the account details given the email id
-		// IMP: this does not change the password of the account,
-		// to change the password use the patch verb
-		newDetails := &auth.UserAccDetails{}
-		if c.ShouldBindJSON(newDetails) != nil {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be updated"))
-			return
-		}
-		if err := ua.UpdateAccDetails(newDetails); err != nil {
-			if _, ok := err.(auth.ErrNotFound); ok {
-				c.AbortWithError(http.StatusBadRequest, err)
-				return
-			} else if _, ok := err.(auth.ErrQueryFailed); ok {
-				c.AbortWithError(http.StatusBadGateway, err)
-				return
-			} else {
-				c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("Unknown error on the server"))
-				return
-			}
-		}
-		c.AbortWithStatus(http.StatusOK)
-		return
-	}
-}
 
 // this one adds database collections to the context
 func lclDbConnect() gin.HandlerFunc {
@@ -113,7 +28,7 @@ func lclDbConnect() gin.HandlerFunc {
 		coll := session.DB("autolumin").C("devreg")
 		if coll == nil {
 			log.Error("Failed to get collection - 'devreg'")
-			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed database collection connection"))
+			c.AbortWithError(http.StatusGatewayTimeout, fmt.Errorf("Failed db connection"))
 			return
 		}
 		c.Set("devreg", &auth.DeviceRegColl{Collection: coll})
@@ -138,6 +53,119 @@ func lclDbConnect() gin.HandlerFunc {
 		return
 	}
 }
+
+func bindToUserAcc(c *gin.Context, result interface{}) error {
+	// depending on the type of the result the client code wants this can initiate a new object
+	switch result.(type) {
+	case *auth.UserAcc:
+		result = &auth.UserAcc{}
+	case *auth.UserAccDetails:
+		result = &auth.UserAccDetails{}
+	}
+	if err := c.ShouldBindJSON(result); err != nil {
+		return ex.NewErr(&ex.ErrJSONBind{}, err, "Failed to read user account from request body", "bindToUserAcc")
+	}
+	return nil
+}
+
+// hndlUsers : handler for user acocunts as a collection and not specifc user
+func hndlUsers(c *gin.Context) {
+	closeSession, _ := c.Get("close_session")
+	defer closeSession.(func())() // this closes the db session when done
+	userreg, _ := c.Get("userreg")
+	ua, _ := userreg.(*auth.UserAccounts)
+	if c.Request.Method == "POST" {
+		// post request works on not the specific account but list of all accounts
+		ud := &auth.UserAccDetails{}
+		if ex.DigestErr(bindToUserAcc(c, ud), c) != 0 {
+			return
+		}
+		if ex.DigestErr(ua.InsertAccount(ud), c) != 0 {
+			return
+		}
+		c.AbortWithStatus(http.StatusOK)
+		return
+	}
+}
+func handlUser(c *gin.Context) {
+	closeSession, _ := c.Get("close_session")
+	defer closeSession.(func())() // this closes the db session when done
+	userreg, _ := c.Get("userreg")
+	ua, _ := userreg.(*auth.UserAccounts)
+	email := c.Param("email")
+	if c.Request.Method == "GET" {
+		// Getting details of the user account
+		details, err := ua.AccountDetails(email)
+		if ex.DigestErr(err, c) != 0 {
+			return
+		}
+		c.JSON(http.StatusOK, details)
+		return
+	} else if c.Request.Method == "DELETE" {
+		if ex.DigestErr(ua.RemoveAccount(email), c) != 0 {
+			return
+		}
+		c.AbortWithStatus(http.StatusOK)
+		return
+	} else if c.Request.Method == "PUT" {
+		// changing all the account details given the email id
+		// IMP: this does not change the password of the account,
+		// to change the password use the patch verb
+		newDetails := &auth.UserAccDetails{}
+		if c.ShouldBindJSON(newDetails) != nil {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be updated"))
+			return
+		}
+		if ex.DigestErr(ua.UpdateAccDetails(newDetails), c) != 0 {
+			return
+		}
+		c.AbortWithStatus(http.StatusOK)
+		return
+	} else if c.Request.Method == "PATCH" {
+		// altering the password here , this has a dedicated verb attached to it
+		accPatch := &auth.UserAcc{}
+		if err := c.ShouldBindJSON(accPatch); err != nil {
+			log.Error(err)
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details, check and send again"))
+			return
+		}
+		if ex.DigestErr(ua.UpdateAccPasswd(accPatch), c) != 0 {
+			return
+		}
+		c.AbortWithStatus(http.StatusOK)
+		return
+	}
+}
+
+// handlAuth : handles login, logout and sends back token as a reponse
+func handlAuth(c *gin.Context) {
+	closeSession, _ := c.Get("close_session")
+	defer closeSession.(func())() // this closes the db session when done
+	userreg, _ := c.Get("userreg")
+	ua, _ := userreg.(*auth.UserAccounts)
+	action := c.Query("action")
+	if action == "" {
+		log.Error("No 'qry' query param found in the url")
+		c.AbortWithStatus(http.StatusMethodNotAllowed)
+		return
+	}
+	if action == "login" {
+		creds := &auth.UserAcc{}
+		if c.ShouldBindJSON(creds) != nil {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be inserted"))
+			return
+		}
+		_, err := ua.Authenticate(creds)
+		if ex.DigestErr(err, c) != 0 {
+			return
+		}
+		c.AbortWithStatus(http.StatusOK)
+		return
+	}
+	// this has to send the new tokens as well
+
+}
+
 func init() {
 	// log.SetFormatter(&log.JSONFormatter{})
 	log.SetFormatter(&log.TextFormatter{
@@ -168,9 +196,15 @@ func main() {
 	users.Use(lclDbConnect())
 
 	users.POST("", hndlUsers)
+
 	users.GET("/:email", handlUser)
 	users.DELETE("/:email", handlUser)
 	users.PUT("/:email", handlUser)
+	users.PATCH("/:email", handlUser)
+
+	auths := r.Group("/auth")
+	auths.Use(lclDbConnect())
+	auths.POST("", handlAuth)
 
 	log.Fatal(r.Run(":8080"))
 }

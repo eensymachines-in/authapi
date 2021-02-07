@@ -51,11 +51,66 @@ Content-Type: application/json
 
 {
     "email":"kneeru@gmail.com",
-    "passwd":"kukkrMutta@1",
+    "passwd":"ranjan_wati@538",
     "role":2,
     "name":"Niranjan Awati",
     "phone":"+91 5453500 5435345",
     "loc":"Pune, 411057"
 }
+
 ###
 DELETE http://localhost:8080/users/kneeru@gmail.com HTTP/1.1
+
+
+###
+PUT http://localhost:8080/users/kneeru@gmail.com HTTP/1.1
+Content-Type: application/json
+
+{
+    "email":"kneeru@gmail.com",
+    "name":"Niranjan Vijay Awati",
+    "phone":"+91 5453500 65654654",
+    "loc":"Pune, 411038"
+}
+
+### 
+PATCH http://localhost:8080/users/kneeru@gmail.com HTTP/1.1
+Content-Type: application/json
+
+{
+    "email":"kneeru@gmail.com",
+    "passwd":"iranjan_%41993"
+}
+### 
+PATCH http://localhost:8080/users/kneeru@gmail.com HTTP/1.1
+Content-Type: application/json
+
+{
+    "email":"niranjan@gmail.com",
+    "passwd":"iranjan_%41993"
+}
+
+### 
+PATCH http://localhost:8080/users/kneeru@gmail.com HTTP/1.1
+Content-Type: application/json
+
+{
+     "email":"kneeru@gmail.com",
+    "passwd":"iranjan_%41993$#%$#%$#DFDFGDDFGDFG"
+}
+
+### 
+
+POST http://localhost:8080/auth?action=login
+Content-Type: application/json
+
+{
+    "email":"",
+    "passwd":"wrongpass@123"
+}
+
+
+# {
+#      "email":"kneeru@gmail.com",
+#     "passwd":"iranjan_%41993"
+# }
