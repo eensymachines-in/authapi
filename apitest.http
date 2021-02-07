@@ -6,7 +6,7 @@ GET http://localhost:8080/devices/erer HTTP/1.1
 
 ###
 
-GET http://localhost:8080/devices/000000007920365b HTTP/1.1
+GET http://localhost:8080/devices/000000007920365c HTTP/1.1
 
 ###
 
@@ -51,8 +51,8 @@ Content-Type: application/json
 
 {
     "email":"kneeru@gmail.com",
-    "passwd":"ranjan_wati@538",
     "role":2,
+    "passwd":"ranjan_wati@538",
     "name":"Niranjan Awati",
     "phone":"+91 5453500 5435345",
     "loc":"Pune, 411057"
@@ -105,8 +105,8 @@ POST http://localhost:8080/auth?action=login
 Content-Type: application/json
 
 {
-    "email":"",
-    "passwd":"wrongpass@123"
+    "email":"kneeru@gmail.com",
+    "passwd":"iranjan_%41993"
 }
 
 

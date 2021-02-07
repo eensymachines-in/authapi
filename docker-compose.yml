@@ -11,14 +11,14 @@ services:
       #   ME_CONFIG_MONGODB_ADMINUSERNAME: admin
       tty: true
       stdin_open: true
-      container_name: lumin_mongo
+      container_name: authapi_mongo
     srvredis:
       image: redis:6.0
       ports:
         - 6379:6379
       tty: true
       stdin_open: true
-      container_name: lumin_cache
+      container_name: authapi_redis
       volumes: 
         - "/data:/data" # this is where redis will store its AOF appendonly file for persistence
     srvlumin:
@@ -32,5 +32,5 @@ services:
       links:
         - "srvmongo"
         - "srvredis"
-      container_name: lumin_api
+      container_name: authapi
       entrypoint: ["go", "run", "."]

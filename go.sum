@@ -35,6 +35,8 @@ github.com/eensymachines-in/auth v1.1.6-0.20210204120917-a3efe4f55678 h1:jIOv6uA
 github.com/eensymachines-in/auth v1.1.6-0.20210204120917-a3efe4f55678/go.mod h1:vojFKu06svURCx0KobQ7TJYT29xF/NGC/O05J2orgA4=
 github.com/eensymachines-in/auth v1.1.6-0.20210206144512-f8635ea3bbb2 h1:ASsmXSmDCOGqBY6AlUhAfICN3PQ/voPU9AZdLYOMWKM=
 github.com/eensymachines-in/auth v1.1.6-0.20210206144512-f8635ea3bbb2/go.mod h1:WLIxu6tXjLGpvIxfOj/LguuREBQ4v98MbyVKLyXRMJs=
+github.com/eensymachines-in/auth v1.1.6-0.20210207104937-78acb716e06b h1:l5tv6k9FKxQasIzakUiA7LRxDnZqD3M/BXAcyKsJtTs=
+github.com/eensymachines-in/auth v1.1.6-0.20210207104937-78acb716e06b/go.mod h1:WLIxu6tXjLGpvIxfOj/LguuREBQ4v98MbyVKLyXRMJs=
 github.com/eensymachines-in/errx v0.0.0-20210206001149-f1ca67d496f7 h1:sejLDPAV6mYTIyR/uyKpb6vVQfzI5IUhDWYzsKTEbzM=
 github.com/eensymachines-in/errx v0.0.0-20210206001149-f1ca67d496f7/go.mod h1:mlZdWb4nmyJQmjqZmFsvFCcxFrkokdRn3ERofX+UB5A=
 github.com/eensymachines-in/utilities v1.0.2-0.20210121125932-f4bdcb85430a/go.mod h1:uraqkydvY9NpQzdbYQkP+HyPI1ZnMirwieSHcg1iTcU=

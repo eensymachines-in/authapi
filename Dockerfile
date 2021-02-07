@@ -5,4 +5,4 @@ FROM kneerunjun/gogingonic:latest
 
 COPY . .
 RUN go mod download 
-RUN go build -o luminapi .
+RUN go build -o authapi .

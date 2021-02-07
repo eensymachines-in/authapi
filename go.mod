@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
-	github.com/eensymachines-in/auth v1.1.6-0.20210206144512-f8635ea3bbb2
+	github.com/eensymachines-in/auth v1.1.6-0.20210207104937-78acb716e06b
 	github.com/eensymachines-in/errx v0.0.0-20210206001149-f1ca67d496f7
 	github.com/eensymachines-in/utilities v1.0.2-0.20210121125932-f4bdcb85430a // indirect
 	github.com/gin-gonic/gin v1.6.3

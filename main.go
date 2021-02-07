@@ -56,14 +56,23 @@ func lclDbConnect() gin.HandlerFunc {
 
 func bindToUserAcc(c *gin.Context, result interface{}) error {
 	// depending on the type of the result the client code wants this can initiate a new object
+	// https://medium.com/hackernoon/today-i-learned-pass-by-reference-on-interface-parameter-in-golang-35ee8d8a848e
+	// to know how to use out params of type interface{} read the above blog
 	switch result.(type) {
 	case *auth.UserAcc:
-		result = &auth.UserAcc{}
+		ua := result.(*auth.UserAcc)
+		*ua = auth.UserAcc{}
+		if err := c.ShouldBindJSON(ua); err != nil {
+			return ex.NewErr(&ex.ErrJSONBind{}, err, "Failed to read user account from request body", "bindToUserAcc")
+		}
+		result = ua
 	case *auth.UserAccDetails:
-		result = &auth.UserAccDetails{}
-	}
-	if err := c.ShouldBindJSON(result); err != nil {
-		return ex.NewErr(&ex.ErrJSONBind{}, err, "Failed to read user account from request body", "bindToUserAcc")
+		ua := result.(*auth.UserAccDetails)
+		*ua = auth.UserAccDetails{}
+		if err := c.ShouldBindJSON(ua); err != nil {
+			return ex.NewErr(&ex.ErrJSONBind{}, err, "Failed to read user account from request body", "bindToUserAcc")
+		}
+		result = ua
 	}
 	return nil
 }
@@ -81,6 +90,7 @@ func hndlUsers(c *gin.Context) {
 			return
 		}
 		if ex.DigestErr(ua.InsertAccount(ud), c) != 0 {
+			log.Infof("just to log the account details %v", *ud)
 			return
 		}
 		c.AbortWithStatus(http.StatusOK)
