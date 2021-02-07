@@ -1,4 +1,4 @@
-module github.com/eensymachines-in/luminapi
+module github.com/eensymachines-in/authapi
 
 go 1.15
 
