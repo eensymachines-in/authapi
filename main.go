@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net/http"
 	"os"
@@ -8,9 +9,32 @@ import (
 	"github.com/eensymachines-in/auth"
 	ex "github.com/eensymachines-in/errx"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v7"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/mgo.v2"
 )
+
+// Middleware to connect to redis cache
+func lclCacConnect() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client := redis.NewClient(&redis.Options{
+			Addr:     "srvredis:6379",
+			Password: "", // no password set
+			DB:       0,  // use default DB
+		})
+		_, err := client.Ping().Result() // testing the cache connection
+		if err != nil {
+			// when the cache connection fails.
+			log.Errorf("Failed to connect to redis cache, login/logout operations would be affected")
+			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed to connect to auth cache"))
+			return
+		}
+		c.Set("cache", client)
+		c.Set("cache_close", func() {
+			client.Close()
+		})
+	}
+}
 
 // this one adds database collections to the context
 func lclDbConnect() gin.HandlerFunc {
@@ -160,6 +184,11 @@ func handlAuth(c *gin.Context) {
 		return
 	}
 	if action == "login" {
+		// User logs in using acocunt email password,
+		// server responds with checking the creds, and then generating the authorization tokens
+		// client can use these stateful tokens to authorize based on the role
+
+		// +++++++++++++++++ authenticating user
 		creds := &auth.UserAcc{}
 		if c.ShouldBindJSON(creds) != nil {
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be inserted"))
@@ -169,10 +198,29 @@ func handlAuth(c *gin.Context) {
 		if ex.DigestErr(err, c) != 0 {
 			return
 		}
-		c.AbortWithStatus(http.StatusOK)
+		// ++++++++++++++++++++++++++++++++++++++
+		// ++++++++++++++++++ generating new tokens
+		details, err := ua.AccountDetails(creds.Email)
+		if ex.DigestErr(err, c) != 0 {
+			return
+		}
+		authTok, refrTok := auth.NewTokenPair(details.Email, details.Role)
+		// ++++++++++++++++++++++++++++++++++++++
+		// ++++++++++++++++ pushing tokens to cache
+		val, _ := c.Get("cache")
+		cac, _ := val.(*redis.Client)
+		val, _ = c.Get("cache_close")
+		defer val.(func())()
+		if ex.DigestErr(auth.UserLogin(authTok, refrTok, cac), c) != 0 {
+			return
+		} // we have the user logged-in in the cache as well
+		// ++++++++++++++++++++++++++++++++++++++
+		// ++++++++++++++++ stringify the tokens and respond
+		authTokStr, _ := authTok.ToString(os.Getenv("AUTH_SECRET"))
+		refrTokStr, _ := refrTok.ToString(os.Getenv("REFR_SECRET"))
+		c.JSON(http.StatusOK, gin.H{"auth": authTokStr, "refr": refrTokStr})
 		return
 	}
-	// this has to send the new tokens as well
 
 }
 
@@ -185,6 +233,29 @@ func init() {
 	log.SetReportCaller(true)
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.TraceLevel)
+	// +++++++++++++++++++ reading the secrets into the environment
+	file, err := os.Open("/run/secrets/auth_secrets")
+	if err != nil {
+		log.Error("Failed to read encryption secrets, please load those %s", err)
+	}
+	defer file.Close()
+
+	reader := bufio.NewReader(file)
+
+	line, _, err := reader.ReadLine()
+	if err != nil {
+		log.Error("Error reading the auth secret from file")
+	}
+	os.Setenv("AUTH_SECRET", string(line))
+	log.Infof("The authentication secret %s", os.Getenv("AUTH_SECRET"))
+
+	line, _, err = reader.ReadLine()
+	if err != nil {
+		log.Error("Error reading the refr secret from file")
+	}
+	os.Setenv("REFR_SECRET", string(line))
+	log.Infof("The refresh secret %s", os.Getenv("REFR_SECRET"))
+
 }
 func main() {
 	r := gin.Default()
@@ -214,6 +285,7 @@ func main() {
 
 	auths := r.Group("/auth")
 	auths.Use(lclDbConnect())
+	auths.Use(lclCacConnect())
 	auths.POST("", handlAuth)
 
 	log.Fatal(r.Run(":8080"))

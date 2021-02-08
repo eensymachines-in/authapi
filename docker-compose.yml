@@ -21,7 +21,7 @@ services:
       container_name: authapi_redis
       volumes: 
         - "/data:/data" # this is where redis will store its AOF appendonly file for persistence
-    srvlumin:
+    srvapi:
       build: .
       volumes:
         - .:/root/go/src/app
@@ -32,5 +32,10 @@ services:
       links:
         - "srvmongo"
         - "srvredis"
+      secrets:
+        - auth_secrets
       container_name: authapi
       entrypoint: ["go", "run", "."]
+secrets:
+  auth_secrets:
+    file: ./api.secret
