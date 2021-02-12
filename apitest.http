@@ -101,7 +101,7 @@ Content-Type: application/json
 
 ### 
 
-POST http://localhost:8080/auth?action=login
+POST http://localhost:8080/authenticate/kneeru@gmail.com
 Content-Type: application/json
 
 {
@@ -109,8 +109,19 @@ Content-Type: application/json
     "passwd":"iranjan_%41993"
 }
 
+### 
+GET http://localhost:8080/authorize?lvl=0
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTMwNDE1MzgsInJvbGUiOjAsInVzZXIiOiJrbmVlcnVAZ21haWwuY29tIiwidXVpZCI6IjZkYTlhOWVhLTU3N2QtNGNjMC1hMGZkLTAxM2I2MzgyZGQxZiJ9.NmWH-MChMmGKrTSDFoiVCrY2RRMyMd6OMfiBGv5puUo
 
-# {
-#      "email":"kneeru@gmail.com",
-#     "passwd":"iranjan_%41993"
-# }
+###
+
+GET http://localhost:8080/authorize?refresh=true
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTMwNDE2MDgsInJvbGUiOjAsInVzZXIiOiJrbmVlcnVAZ21haWwuY29tIiwidXVpZCI6ImU3ODRjNjU5LTkxYWUtNGYwYy05MDZiLTRlYmVkZmM3MjMxZSJ9.y3XfC7TSULQr-h5ZW00k5mmztGXaBdw9fSGoC3AnBzc
+
+###
+
+DELETE  http://localhost:8080/authorize
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTMwNDE2MDgsInJvbGUiOjAsInVzZXIiOiJrbmVlcnVAZ21haWwuY29tIiwidXVpZCI6ImU3ODRjNjU5LTkxYWUtNGYwYy05MDZiLTRlYmVkZmM3MjMxZSJ9.y3XfC7TSULQr-h5ZW00k5mmztGXaBdw9fSGoC3AnBzc

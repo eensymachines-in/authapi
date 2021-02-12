@@ -2,227 +2,12 @@ package main
 
 import (
 	"bufio"
-	"fmt"
-	"net/http"
 	"os"
 
-	"github.com/eensymachines-in/auth"
-	ex "github.com/eensymachines-in/errx"
+	"github.com/eensymachines-in/authapi/handlers"
 	"github.com/gin-gonic/gin"
-	"github.com/go-redis/redis/v7"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/mgo.v2"
 )
-
-// Middleware to connect to redis cache
-func lclCacConnect() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		client := redis.NewClient(&redis.Options{
-			Addr:     "srvredis:6379",
-			Password: "", // no password set
-			DB:       0,  // use default DB
-		})
-		_, err := client.Ping().Result() // testing the cache connection
-		if err != nil {
-			// when the cache connection fails.
-			log.Errorf("Failed to connect to redis cache, login/logout operations would be affected")
-			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed to connect to auth cache"))
-			return
-		}
-		c.Set("cache", client)
-		c.Set("cache_close", func() {
-			client.Close()
-		})
-	}
-}
-
-// this one adds database collections to the context
-func lclDbConnect() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ip := "srvmongo"
-		session, err := mgo.Dial(ip)
-		if err != nil {
-			return
-		}
-		closeSession := func() {
-			session.Close()
-		}
-		// connecting to collections and pushing it in the context
-		// Incase the gateway fails and the database connection is not established we have to abort
-		coll := session.DB("autolumin").C("devreg")
-		if coll == nil {
-			log.Error("Failed to get collection - 'devreg'")
-			c.AbortWithError(http.StatusGatewayTimeout, fmt.Errorf("Failed db connection"))
-			return
-		}
-		c.Set("devreg", &auth.DeviceRegColl{Collection: coll})
-
-		coll = session.DB("autolumin").C("devblacklist")
-		if coll == nil {
-			log.Error("Failed to get collection - 'devblacklist'")
-			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed database collection connection"))
-			return
-		}
-		c.Set("devblacklist", &auth.BlacklistColl{Collection: coll})
-		// User account registration acocunt
-		coll = session.DB("autolumin").C("userreg")
-		if coll == nil {
-			log.Error("Failed to get collection - 'userreg'")
-			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed database collection connection"))
-			return
-		}
-		c.Set("userreg", &auth.UserAccounts{Collection: coll})
-		// session close callback
-		c.Set("close_session", closeSession)
-		return
-	}
-}
-
-func bindToUserAcc(c *gin.Context, result interface{}) error {
-	// depending on the type of the result the client code wants this can initiate a new object
-	// https://medium.com/hackernoon/today-i-learned-pass-by-reference-on-interface-parameter-in-golang-35ee8d8a848e
-	// to know how to use out params of type interface{} read the above blog
-	switch result.(type) {
-	case *auth.UserAcc:
-		ua := result.(*auth.UserAcc)
-		*ua = auth.UserAcc{}
-		if err := c.ShouldBindJSON(ua); err != nil {
-			return ex.NewErr(&ex.ErrJSONBind{}, err, "Failed to read user account from request body", "bindToUserAcc")
-		}
-		result = ua
-	case *auth.UserAccDetails:
-		ua := result.(*auth.UserAccDetails)
-		*ua = auth.UserAccDetails{}
-		if err := c.ShouldBindJSON(ua); err != nil {
-			return ex.NewErr(&ex.ErrJSONBind{}, err, "Failed to read user account from request body", "bindToUserAcc")
-		}
-		result = ua
-	}
-	return nil
-}
-
-// hndlUsers : handler for user acocunts as a collection and not specifc user
-func hndlUsers(c *gin.Context) {
-	closeSession, _ := c.Get("close_session")
-	defer closeSession.(func())() // this closes the db session when done
-	userreg, _ := c.Get("userreg")
-	ua, _ := userreg.(*auth.UserAccounts)
-	if c.Request.Method == "POST" {
-		// post request works on not the specific account but list of all accounts
-		ud := &auth.UserAccDetails{}
-		if ex.DigestErr(bindToUserAcc(c, ud), c) != 0 {
-			return
-		}
-		if ex.DigestErr(ua.InsertAccount(ud), c) != 0 {
-			log.Infof("just to log the account details %v", *ud)
-			return
-		}
-		c.AbortWithStatus(http.StatusOK)
-		return
-	}
-}
-func handlUser(c *gin.Context) {
-	closeSession, _ := c.Get("close_session")
-	defer closeSession.(func())() // this closes the db session when done
-	userreg, _ := c.Get("userreg")
-	ua, _ := userreg.(*auth.UserAccounts)
-	email := c.Param("email")
-	if c.Request.Method == "GET" {
-		// Getting details of the user account
-		details, err := ua.AccountDetails(email)
-		if ex.DigestErr(err, c) != 0 {
-			return
-		}
-		c.JSON(http.StatusOK, details)
-		return
-	} else if c.Request.Method == "DELETE" {
-		if ex.DigestErr(ua.RemoveAccount(email), c) != 0 {
-			return
-		}
-		c.AbortWithStatus(http.StatusOK)
-		return
-	} else if c.Request.Method == "PUT" {
-		// changing all the account details given the email id
-		// IMP: this does not change the password of the account,
-		// to change the password use the patch verb
-		newDetails := &auth.UserAccDetails{}
-		if c.ShouldBindJSON(newDetails) != nil {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be updated"))
-			return
-		}
-		if ex.DigestErr(ua.UpdateAccDetails(newDetails), c) != 0 {
-			return
-		}
-		c.AbortWithStatus(http.StatusOK)
-		return
-	} else if c.Request.Method == "PATCH" {
-		// altering the password here , this has a dedicated verb attached to it
-		accPatch := &auth.UserAcc{}
-		if err := c.ShouldBindJSON(accPatch); err != nil {
-			log.Error(err)
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details, check and send again"))
-			return
-		}
-		if ex.DigestErr(ua.UpdateAccPasswd(accPatch), c) != 0 {
-			return
-		}
-		c.AbortWithStatus(http.StatusOK)
-		return
-	}
-}
-
-// handlAuth : handles login, logout and sends back token as a reponse
-func handlAuth(c *gin.Context) {
-	closeSession, _ := c.Get("close_session")
-	defer closeSession.(func())() // this closes the db session when done
-	userreg, _ := c.Get("userreg")
-	ua, _ := userreg.(*auth.UserAccounts)
-	action := c.Query("action")
-	if action == "" {
-		log.Error("No 'qry' query param found in the url")
-		c.AbortWithStatus(http.StatusMethodNotAllowed)
-		return
-	}
-	if action == "login" {
-		// User logs in using acocunt email password,
-		// server responds with checking the creds, and then generating the authorization tokens
-		// client can use these stateful tokens to authorize based on the role
-
-		// +++++++++++++++++ authenticating user
-		creds := &auth.UserAcc{}
-		if c.ShouldBindJSON(creds) != nil {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be inserted"))
-			return
-		}
-		_, err := ua.Authenticate(creds)
-		if ex.DigestErr(err, c) != 0 {
-			return
-		}
-		// ++++++++++++++++++++++++++++++++++++++
-		// ++++++++++++++++++ generating new tokens
-		details, err := ua.AccountDetails(creds.Email)
-		if ex.DigestErr(err, c) != 0 {
-			return
-		}
-		authTok, refrTok := auth.NewTokenPair(details.Email, details.Role)
-		// ++++++++++++++++++++++++++++++++++++++
-		// ++++++++++++++++ pushing tokens to cache
-		val, _ := c.Get("cache")
-		cac, _ := val.(*redis.Client)
-		val, _ = c.Get("cache_close")
-		defer val.(func())()
-		if ex.DigestErr(auth.UserLogin(authTok, refrTok, cac), c) != 0 {
-			return
-		} // we have the user logged-in in the cache as well
-		// ++++++++++++++++++++++++++++++++++++++
-		// ++++++++++++++++ stringify the tokens and respond
-		authTokStr, _ := authTok.ToString(os.Getenv("AUTH_SECRET"))
-		refrTokStr, _ := refrTok.ToString(os.Getenv("REFR_SECRET"))
-		c.JSON(http.StatusOK, gin.H{"auth": authTokStr, "refr": refrTokStr})
-		return
-	}
-
-}
 
 func init() {
 	// log.SetFormatter(&log.JSONFormatter{})
@@ -236,19 +21,18 @@ func init() {
 	// +++++++++++++++++++ reading the secrets into the environment
 	file, err := os.Open("/run/secrets/auth_secrets")
 	if err != nil {
-		log.Error("Failed to read encryption secrets, please load those %s", err)
+		log.Errorf("Failed to read encryption secrets, please load those %s", err)
 	}
 	defer file.Close()
-
 	reader := bufio.NewReader(file)
-
+	// ++++++++++++++++++++++++++++++++ reading in the auth secret
 	line, _, err := reader.ReadLine()
 	if err != nil {
 		log.Error("Error reading the auth secret from file")
 	}
 	os.Setenv("AUTH_SECRET", string(line))
 	log.Infof("The authentication secret %s", os.Getenv("AUTH_SECRET"))
-
+	// ++++++++++++++++++++ reading in the refresh secret
 	line, _, err = reader.ReadLine()
 	if err != nil {
 		log.Error("Error reading the refr secret from file")
@@ -264,29 +48,35 @@ func main() {
 			"message": "pong",
 		})
 	})
+
+	r.Use(CORS)
 	// devices group
 	devices := r.Group("/devices")
 	devices.Use(lclDbConnect())
 
-	devices.POST("", handlDevices)          // when creating new registrations
-	devices.GET("/:serial", handlDevices)   // when getting existing registrations
-	devices.PATCH("/:serial", handlDevices) // when modifying existing registration
+	devices.POST("", handlers.HandlDevices)          // when creating new registrations
+	devices.GET("/:serial", handlers.HandlDevices)   // when getting existing registrations
+	devices.PATCH("/:serial", handlers.HandlDevices) // when modifying existing registration
 
 	// Users group
 	users := r.Group("/users")
 	users.Use(lclDbConnect())
 
-	users.POST("", hndlUsers)
+	users.POST("", handlers.HndlUsers)
 
-	users.GET("/:email", handlUser)
-	users.DELETE("/:email", handlUser)
-	users.PUT("/:email", handlUser)
-	users.PATCH("/:email", handlUser)
+	users.GET("/:email", handlers.HandlUser)
+	users.DELETE("/:email", handlers.HandlUser)
+	users.PUT("/:email", handlers.HandlUser)
+	users.PATCH("/:email", handlers.HandlUser)
 
-	auths := r.Group("/auth")
-	auths.Use(lclDbConnect())
-	auths.Use(lclCacConnect())
-	auths.POST("", handlAuth)
+	// will handle only authentication
+	auths := r.Group("/authenticate")
+	auths.Use(lclDbConnect()).Use(lclCacConnect()).POST("/:email", handlers.HandlAuth)
 
+	// /authorize/?lvl=2
+	// /authorize/?refresh=true
+	authrz := r.Group("/authorize")
+	authrz.Use(lclCacConnect()).Use(tokenParse()).GET("", handlers.HndlAuthrz)
+	authrz.Use(tokenParse()).DELETE("", handlers.HndlAuthrz)
 	log.Fatal(r.Run(":8080"))
 }
