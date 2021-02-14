@@ -55,7 +55,7 @@ func insertUser(email, passwd, name, loc, phone string, role int, t *testing.T, 
 	assert.NotNil(t, resp, "Unexpected nil response from server for posting a new account")
 	assert.Equal(t, expected, resp.StatusCode, "Was expecting a 200 ok on posting new user account")
 }
-func putUser(email, name, loc, phone string, t *testing.T, expected int) {
+func putUser(email, name, loc, phone, auth string, t *testing.T, expected int) {
 	url := "http://localhost:8080/users"
 	ua := map[string]interface{}{
 		"email": email,
@@ -65,13 +65,15 @@ func putUser(email, name, loc, phone string, t *testing.T, expected int) {
 	}
 	body, _ := json.Marshal(ua)
 	req, _ := http.NewRequest("PUT", fmt.Sprintf("%s/%s", url, ua["email"]), bytes.NewBuffer(body))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
 	resp, err := (&http.Client{}).Do(req)
+
 	assert.Nil(t, err, "Unexpected error making a put request")
 	assert.NotNil(t, resp, "Unexpected nil response from server")
 	assert.Equal(t, expected, resp.StatusCode, "Incorrect response status code")
 }
 
-func delUser(email, authTok string, t *testing.T) {
+func delUser(email, authTok string, t *testing.T, expected int) {
 	url := "http://localhost:8080/users"
 	client := &http.Client{}
 	req, _ := http.NewRequest("DELETE", fmt.Sprintf("%s/%s", url, email), nil)
@@ -79,10 +81,10 @@ func delUser(email, authTok string, t *testing.T) {
 	resp, err := client.Do(req)
 	assert.Nil(t, err, "Unexpected error making a delete request")
 	assert.NotNil(t, resp, "Unexpected nil response from server")
-	assert.Equal(t, 200, resp.StatusCode, "Was expecting 200 response status code")
+	assert.Equal(t, expected, resp.StatusCode, "Was expecting 200 response status code")
 }
 
-func patchUser(email, passwd string, t *testing.T, expected int) {
+func patchUser(email, passwd, auth string, t *testing.T, expected int) {
 	url := "http://localhost:8080/users"
 	ua := map[string]interface{}{
 		"email":  email,
@@ -90,6 +92,7 @@ func patchUser(email, passwd string, t *testing.T, expected int) {
 	}
 	body, _ := json.Marshal(ua)
 	req, _ := http.NewRequest("PATCH", fmt.Sprintf("%s/%s", url, ua["email"]), bytes.NewBuffer(body))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
 	resp, err := (&http.Client{}).Do(req)
 	assert.Nil(t, err, "Unexpected error making a patch request")
 	assert.NotNil(t, resp, "Unexpected nil response from server")
@@ -156,17 +159,19 @@ func TestUser(t *testing.T) {
 
 	// ++++++++++++
 	// putting new user details
-	putUser("kneerun@someshitdomain.com", "NewShitName", "Pune, 411038", "53435435345 3534", t, 200)
-	putUser("kneerun@someshitdomain.com", "", "", "", t, 400)
+	putUser("kneerun@someshitdomain.com", "NewShitName", "Pune, 411038", "53435435345 3534", toks["auth"], t, 200)
+	putUser("kneerun@someshitdomain.com", "", "", "", toks["auth"], t, 400)
 
 	// ++++++++++++++
 	// patching the use for the password
-	patchUser("kneerun@someshitdomain.com", "unjun@41993#@", t, 200)
+	patchUser("kneerun@someshitdomain.com", "unjun@41993#@", toks["auth"], t, 200)
 	toks = authenticateUser("kneerun@someshitdomain.com", "unjun@41993#@", t, 200)
 	authorizeUser(toks["auth"], t, 200)
 	// Here we try to remove the user with requisite authentication
-	delUser("kneerun@someshitdomain.com", toks["auth"], t)
-	delUser("modafucka@someshitdomain.com", toks["auth"], t) //trying to delete an user that's not registered
+	delUser("kneerun@someshitdomain.com", toks["auth"], t, 200)
+	// since below we are using the token from kneerun@someshitdomain.com and trying to delete modafucka@someshitdomain.com this will forbid the request
+	// and rightly so
+	delUser("modafucka@someshitdomain.com", toks["auth"], t, 403) //trying to delete an user that's not registered
 	<-time.After(72 * time.Second)
 
 	authorizeUser(toks["auth"], t, 401)

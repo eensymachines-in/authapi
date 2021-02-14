@@ -95,6 +95,23 @@ func tokenParse() gin.HandlerFunc {
 	}
 }
 
+// verifyUser : this shall follow the tokenParse and then checks to see if the user in the token is same as the one in the param
+// this is vital when it comes to modification of user accouts, only the user himself should be allowed to change details
+func verifyUser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		val, exists := c.Get("token")
+		if !exists || val == nil {
+			c.AbortWithError(http.StatusForbidden, fmt.Errorf("No authorization found on the request that mandates it"))
+			return
+		}
+		tok := val.(*auth.JWTok)
+		if !(tok.User == c.Param("email")) {
+			c.AbortWithError(http.StatusForbidden, fmt.Errorf("Unverified user. Sign in again to perform this action"))
+			return
+		}
+	}
+}
+
 // verifyRole : this shall follow the tokenParse and will check if the token has the minimum required elevation
 func verifyRole(elevation int) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -104,7 +121,6 @@ func verifyRole(elevation int) gin.HandlerFunc {
 			return
 		}
 		tok := val.(*auth.JWTok)
-		log.Infof("Role of the token %d", tok.Role)
 		if !tok.HasElevation(elevation) {
 			c.AbortWithError(http.StatusForbidden, fmt.Errorf("Not enough elevation found on your role"))
 			return
