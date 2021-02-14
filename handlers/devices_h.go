@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/eensymachines-in/auth"
+	auth "github.com/eensymachines-in/auth/v2"
 	ex "github.com/eensymachines-in/errx"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"

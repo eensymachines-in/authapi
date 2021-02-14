@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/eensymachines-in/auth"
+	auth "github.com/eensymachines-in/auth/v2"
 	ex "github.com/eensymachines-in/errx"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -34,7 +34,7 @@ func bindToUserAcc(c *gin.Context, result interface{}) error {
 	return nil
 }
 
-// hndlUsers : handler for user acocunts as a collection and not specifc user
+// HndlUsers : handler for user acocunts as a collection and not specifc user
 func HndlUsers(c *gin.Context) {
 	closeSession, _ := c.Get("close_session")
 	defer closeSession.(func())() // this closes the db session when done
@@ -54,6 +54,8 @@ func HndlUsers(c *gin.Context) {
 		return
 	}
 }
+
+// HandlUser : handling a single user
 func HandlUser(c *gin.Context) {
 	closeSession, _ := c.Get("close_session")
 	defer closeSession.(func())() // this closes the db session when done
@@ -69,6 +71,7 @@ func HandlUser(c *gin.Context) {
 		c.JSON(http.StatusOK, details)
 		return
 	} else if c.Request.Method == "DELETE" {
+		// FIXME: here before the request is executed a middle ware has to be consulted for the authorization level
 		if ex.DigestErr(ua.RemoveAccount(email), c) != 0 {
 			return
 		}

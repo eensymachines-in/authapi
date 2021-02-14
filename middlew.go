@@ -7,8 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/eensymachines-in/auth"
-	cac "github.com/eensymachines-in/auth/cache"
+	auth "github.com/eensymachines-in/auth/v2"
 	ex "github.com/eensymachines-in/errx"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v7"
@@ -38,20 +37,20 @@ func CORS(c *gin.Context) {
 }
 
 // readAuthHeader : knows how to parse header for authorization
-func readAuthHeader(c *gin.Context) (cac.TokenStr, error) {
+func readAuthHeader(c *gin.Context) (auth.TokenStr, error) {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
-		return cac.TokenStr(""), ex.NewErr(&ex.ErrInvalid{}, nil, "Authorization header is empty", "readAuthHeader/c.GetHeader()")
+		return auth.TokenStr(""), ex.NewErr(&ex.ErrInvalid{}, nil, "Authorization header is empty", "readAuthHeader/c.GetHeader()")
 	}
 	parts := strings.Split(authHeader, "Bearer ")
 	if len(parts) != 2 {
-		return cac.TokenStr(""), ex.NewErr(&ex.ErrInvalid{}, nil, "Invalid authorization header", "readAuthHeader/strings.Split()")
+		return auth.TokenStr(""), ex.NewErr(&ex.ErrInvalid{}, nil, "Invalid authorization header", "readAuthHeader/strings.Split()")
 	}
 	tokenStr := parts[1] // we are expecting only one token at a time
 	if tokenStr == "" {
-		return cac.TokenStr(""), ex.NewErr(&ex.ErrInvalid{}, nil, "No authorization token found", "readAuthHeader/strings.Split()")
+		return auth.TokenStr(""), ex.NewErr(&ex.ErrInvalid{}, nil, "No authorization token found", "readAuthHeader/strings.Split()")
 	}
-	return cac.TokenStr(tokenStr), nil
+	return auth.TokenStr(tokenStr), nil
 }
 
 // tokenParse : from the request this will parse the tokens
@@ -65,7 +64,7 @@ func tokenParse() gin.HandlerFunc {
 		}
 		// ++++++++++++++++++
 		// now converting into token object, and checking for level
-		var tok *cac.JWTok
+		var tok *auth.JWTok
 		if c.Query("refresh") == "true" {
 			// only if its refresh action then we use the relevant secret
 			// here we dont care about elevation since all what we are here to do is get new tokens
@@ -96,10 +95,27 @@ func tokenParse() gin.HandlerFunc {
 	}
 }
 
+// verifyRole : this shall follow the tokenParse and will check if the token has the minimum required elevation
+func verifyRole(elevation int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		val, exists := c.Get("token")
+		if !exists || val == nil {
+			c.AbortWithError(http.StatusForbidden, fmt.Errorf("No authorization found on the request that mandates it"))
+			return
+		}
+		tok := val.(*auth.JWTok)
+		log.Infof("Role of the token %d", tok.Role)
+		if !tok.HasElevation(elevation) {
+			c.AbortWithError(http.StatusForbidden, fmt.Errorf("Not enough elevation found on your role"))
+			return
+		}
+	}
+}
+
 // Middleware to connect to redis cache
 func lclCacConnect() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tkCac := &cac.TokenCache{Client: redis.NewClient(&redis.Options{
+		tkCac := &auth.TokenCache{Client: redis.NewClient(&redis.Options{
 			Addr:     "srvredis:6379",
 			Password: "", // no password set
 			DB:       0,  // use default DB

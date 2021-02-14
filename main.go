@@ -63,11 +63,10 @@ func main() {
 	users.Use(lclDbConnect())
 
 	users.POST("", handlers.HndlUsers)
-
 	users.GET("/:email", handlers.HandlUser)
-	users.DELETE("/:email", handlers.HandlUser)
 	users.PUT("/:email", handlers.HandlUser)
 	users.PATCH("/:email", handlers.HandlUser)
+	users.Use(tokenParse()).Use(verifyRole(2)).DELETE("/:email", handlers.HandlUser)
 
 	// will handle only authentication
 	auths := r.Group("/authenticate")
