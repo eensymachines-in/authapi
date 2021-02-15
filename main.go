@@ -72,12 +72,14 @@ func main() {
 
 	// will handle only authentication
 	auths := r.Group("/authenticate")
-	auths.Use(lclDbConnect()).Use(lclCacConnect()).POST("/:email", handlers.HandlAuth)
+	auths.Use(lclCacConnect()).Use(lclDbConnect()).Use(b64UserCredsParse())
+	auths.POST("/:email", handlers.HandlAuth)
 
 	// /authorize/?lvl=2
 	// /authorize/?refresh=true
 	authrz := r.Group("/authorize")
-	authrz.Use(lclCacConnect()).Use(tokenParse()).GET("", handlers.HndlAuthrz)
-	authrz.Use(tokenParse()).DELETE("", handlers.HndlAuthrz)
+	authrz.Use(lclCacConnect()).Use(tokenParse())
+	authrz.GET("", handlers.HndlAuthrz)
+	authrz.DELETE("", handlers.HndlAuthrz)
 	log.Fatal(r.Run(":8080"))
 }

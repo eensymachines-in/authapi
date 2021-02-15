@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	b64 "encoding/base64"
+
 	auth "github.com/eensymachines-in/auth/v2"
 	ex "github.com/eensymachines-in/errx"
 	"github.com/gin-gonic/gin"
@@ -37,20 +39,54 @@ func CORS(c *gin.Context) {
 }
 
 // readAuthHeader : knows how to parse header for authorization
-func readAuthHeader(c *gin.Context) (auth.TokenStr, error) {
+func readAuthHeader(c *gin.Context, authfield string, hdrValRead func(string) error) error {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
-		return auth.TokenStr(""), ex.NewErr(&ex.ErrInvalid{}, nil, "Authorization header is empty", "readAuthHeader/c.GetHeader()")
+		return ex.NewErr(&ex.ErrInvalid{}, nil, "Authorization header is empty", "readAuthHeader/c.GetHeader()")
 	}
-	parts := strings.Split(authHeader, "Bearer ")
+
+	// Please see the " " after authfield, do not include from client code
+	parts := strings.Split(authHeader, " ") // Bearer or Basic depending on if its token or the credentials
 	if len(parts) != 2 {
-		return auth.TokenStr(""), ex.NewErr(&ex.ErrInvalid{}, nil, "Invalid authorization header", "readAuthHeader/strings.Split()")
+		return ex.NewErr(&ex.ErrInvalid{}, nil, "Invalid authorization header", "readAuthHeader/strings.Split()")
 	}
-	tokenStr := parts[1] // we are expecting only one token at a time
-	if tokenStr == "" {
-		return auth.TokenStr(""), ex.NewErr(&ex.ErrInvalid{}, nil, "No authorization token found", "readAuthHeader/strings.Split()")
+	if parts[1] == "" {
+		return ex.NewErr(&ex.ErrInvalid{}, nil, "No authorization token found", "readAuthHeader/strings.Split()")
 	}
-	return auth.TokenStr(tokenStr), nil
+	return hdrValRead(parts[1]) // this function is customizable by the middle ware function
+	// Incase of token parse this is a simple TokenStr conversion
+	// while when its credentials - user:passwd after base64 decoding
+}
+
+// b64UserCredsParse :here we parse in user credentials from the request
+func b64UserCredsParse() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// ++++++++++++++++++
+		// Capturing the user account credentials encoded b64 format from
+		var email, passwd string
+		err := readAuthHeader(c, "Basic", func(val string) error {
+			v, err := b64.StdEncoding.DecodeString(val)
+			if err != nil {
+				return ex.NewErr(&ex.ErrInvalid{}, err, "Error reading the encrypted credentials", "b64UserCredsParse/readAuthHeader")
+			}
+			lump := strings.Split(string(v), ":")
+			email = lump[0]
+			passwd = lump[1]
+			return nil
+		})
+		if ex.DigestErr(err, c) != 0 {
+			return
+		}
+		if email == "" || passwd == "" {
+			// ++++++++++ incase the readAuthHeader read out empty creds
+			c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("Empty credentials, cannot go ahead"))
+			return
+		}
+		// ++++++++++++ user email and password are all set and ready to go
+		c.Set("email", email)
+		c.Set("passwd", passwd)
+		log.Infof("Email %s Passwd %s", email, passwd)
+	}
 }
 
 // tokenParse : from the request this will parse the tokens
@@ -58,7 +94,11 @@ func tokenParse() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// ++++++++++++++++++
 		// capturing the string token from the authorization header
-		ts, err := readAuthHeader(c)
+		var ts auth.TokenStr
+		err := readAuthHeader(c, "Bearer", func(val string) error {
+			ts = auth.TokenStr(val)
+			return nil
+		})
 		if ex.DigestErr(err, c) != 0 {
 			return
 		}

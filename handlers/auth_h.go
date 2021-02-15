@@ -71,7 +71,7 @@ func HndlAuthrz(c *gin.Context) {
 
 }
 
-// handlAuth : login and authnetication only
+// HandlAuth : login and authnetication only
 func HandlAuth(c *gin.Context) {
 	// +++++++++++++++++++++++++
 	// Getting the database handle
@@ -95,16 +95,20 @@ func HandlAuth(c *gin.Context) {
 	defer cacClose()
 	// ++++++++++++++++++++++++++++
 	// getting the user param
-	email := c.Param("email")
-	if email == "" {
-		c.AbortWithStatus(http.StatusBadGateway)
-		return
-	}
-	creds := &auth.UserAcc{}
-	if ex.DigestErr(c.ShouldBindJSON(creds), c) != 0 {
-		c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to bind user account credentials from the request"))
-		return
-	}
+	// email := c.Param("email")
+	// if email == "" {
+	// 	c.AbortWithStatus(http.StatusBadGateway)
+	// 	return
+	// }
+	// creds := &auth.UserAcc{}
+	// if ex.DigestErr(c.ShouldBindJSON(creds), c) != 0 {
+	// 	c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to bind user account credentials from the request"))
+	// 	return
+	// }
+	// +++++++++ now that the middleware is taking this up
+	e, _ := c.Get("email")
+	p, _ := c.Get("passwd")
+	creds := &auth.UserAcc{Email: fmt.Sprintf("%v", e), Passwd: fmt.Sprintf("%v", p)}
 	details, err := usrRegColl.AccountDetails(creds.Email)
 	if ex.DigestErr(err, c) != 0 {
 		return
