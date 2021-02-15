@@ -72,6 +72,7 @@ resp, err := (&http.Client{}).Do(req)
 ---------
 
 ```go
+var auth string // authentication token as sent by the login 
 req, _ := http.NewRequest("GET", "http://localhost:8080/authorize", nil)
 req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
 resp, err := (&http.Client{}).Do(req)
@@ -81,6 +82,7 @@ resp, err := (&http.Client{}).Do(req)
 -----------
 
 ```go
+var refr string // refresh token - please see if the auth token has not expired, that would be orphaned.
 req, _ := http.NewRequest("GET", "http://localhost:8080/authorize?refresh=true", nil)
 req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", refr))
 resp, err := (&http.Client{}).Do(req)
@@ -95,6 +97,7 @@ if json.NewDecoder(resp.Body).Decode(&target) != nil {
 -------
 
 ```go 
+var auth, refr string // token string form that used to authorize
 req, _ := http.NewRequest("DELETE", "http://localhost:8080/authorize", nil)
 req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
 (&http.Client{}).Do(req)
