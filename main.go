@@ -64,11 +64,10 @@ func main() {
 
 	users.POST("", handlers.HndlUsers)
 	users.GET("/:email", handlers.HandlUser)
-	// +++++++++++ modification of the account details needs to verify if the user in the param is same as in the token
-	users.Use(tokenParse()).Use(verifyUser()).PUT("/:email", handlers.HandlUser)
-	users.Use(tokenParse()).Use(verifyUser()).PATCH("/:email", handlers.HandlUser)
-	// +++++++++ to delete an account you need elevated permission
-	users.Use(tokenParse()).Use(verifyRole(2)).DELETE("/:email", handlers.HandlUser)
+	users.PUT("/:email", tokenParse(), verifyUser(), handlers.HandlUser) // changing the user account details
+	users.PATCH("/:email", b64UserCredsParse(), handlers.HandlUser)      // update password
+	// +++++++++ to delete an account you need elevated permission and authentication token
+	users.DELETE("/:email", tokenParse(), verifyRole(2), handlers.HandlUser)
 
 	// will handle only authentication
 	auths := r.Group("/authenticate")

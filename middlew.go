@@ -59,6 +59,8 @@ func readAuthHeader(c *gin.Context, authfield string, hdrValRead func(string) er
 }
 
 // b64UserCredsParse :here we parse in user credentials from the request
+// Incase the email or password is empty this will respond with 401 and not the expected 400
+// 401 makes more sense when we are authenticating it but 400 makes more sense when we are patching the password
 func b64UserCredsParse() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// ++++++++++++++++++

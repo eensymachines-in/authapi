@@ -93,12 +93,16 @@ func HandlUser(c *gin.Context) {
 		return
 	} else if c.Request.Method == "PATCH" {
 		// altering the password here , this has a dedicated verb attached to it
-		accPatch := &auth.UserAcc{}
-		if err := c.ShouldBindJSON(accPatch); err != nil {
-			log.Error(err)
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details, check and send again"))
-			return
-		}
+		// accPatch := &auth.UserAcc{}
+		// if err := c.ShouldBindJSON(accPatch); err != nil {
+		// 	log.Error(err)
+		// 	c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details, check and send again"))
+		// 	return
+		// }
+		// incase of a patch we are now getting this from the middleware
+		userEmail, _ := c.Get("email")
+		passwd, _ := c.Get("passwd") // we have extracted the email
+		accPatch := &auth.UserAcc{Email: fmt.Sprintf("%v", userEmail), Passwd: fmt.Sprintf("%v", passwd)}
 		if ex.DigestErr(ua.UpdateAccPasswd(accPatch), c) != 0 {
 			return
 		}
