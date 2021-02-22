@@ -15,12 +15,14 @@ import (
 func HandlDevices(c *gin.Context) {
 	closeSession, _ := c.Get("close_session")
 	defer closeSession.(func())() // this closes the db session when done
-	devregColl, _ := c.Get("devreg")
-	blcklColl, _ := c.Get("devblacklist")
+	val, _ := c.Get("devreg")
+	devregColl := val.(*auth.DeviceRegColl)
+	val, _ = c.Get("devblacklist")
+	blcklColl := val.(*auth.BlacklistColl)
 	serial := c.Param("serial")
 	if c.Request.Method == "GET" {
 		// this is when we are trying to get the device registration of a specific device
-		status, err := devregColl.(*auth.DeviceRegColl).DeviceOfSerial(serial)
+		status, err := devregColl.DeviceOfSerial(serial)
 		if ex.DigestErr(err, c) != 0 {
 			return
 		}
@@ -42,11 +44,11 @@ func HandlDevices(c *gin.Context) {
 				return
 			}
 			if value {
-				if ex.DigestErr(devregColl.(*auth.DeviceRegColl).LockDevice(serial), c) != 0 {
+				if ex.DigestErr(devregColl.LockDevice(serial), c) != 0 {
 					return
 				}
 			} else {
-				if ex.DigestErr(devregColl.(*auth.DeviceRegColl).UnLockDevice(serial), c) != 0 {
+				if ex.DigestErr(devregColl.UnLockDevice(serial), c) != 0 {
 					return
 				}
 			}
@@ -61,12 +63,16 @@ func HandlDevices(c *gin.Context) {
 			}
 			if value {
 				// device needs to be black listed
-				if ex.DigestErr(blcklColl.(*auth.BlacklistColl).Black(&auth.Blacklist{Serial: serial, Reason: "Test change in the blacklist"}), c) != 0 {
+				// Even before the device is black listed it has to be removed from the registration
+				if ex.DigestErr(devregColl.RemoveDeviceReg(serial), c) != 0 {
+					return
+				}
+				if ex.DigestErr(blcklColl.Black(&auth.Blacklist{Serial: serial, Reason: "Test change in the blacklist"}), c) != 0 {
 					return
 				}
 			} else {
 				// the device needs to be whitelisted
-				if ex.DigestErr(blcklColl.(*auth.BlacklistColl).White(serial), c) != 0 {
+				if ex.DigestErr(blcklColl.White(serial), c) != 0 {
 					return
 				}
 			}
@@ -74,17 +80,30 @@ func HandlDevices(c *gin.Context) {
 		c.AbortWithStatus(http.StatusOK)
 		return
 	} else if c.Request.Method == "POST" {
+		// FIXME: before the device is registered it would have to check if account has been registered
+
 		devReg := &auth.DeviceReg{}
 		if err := c.ShouldBindJSON(devReg); err != nil {
 			log.Errorf("handlDevices: Failed to bind device registration from request body %s", err)
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read device registration details, kindly check and send again"))
 			return
 		}
-		if ex.DigestErr(devregColl.(*auth.DeviceRegColl).InsertDeviceReg(devReg, blcklColl.(*auth.BlacklistColl).Collection), c) != 0 {
+		col, _ := c.Get("userreg")
+		userReg := col.(*auth.UserAccounts)
+		if !userReg.IsRegistered(devReg.User) {
+			// If the account isnt registered, the device cannot be registered
+			ex.DigestErr(ex.NewErr(&ex.ErrNotFound{}, fmt.Errorf("Unable to find the user account registered, %s", devReg.User), "User account isnt registered, cannot register device", "POST/devices"), c)
+			return
+		}
+		if ex.DigestErr(devregColl.InsertDeviceReg(devReg, blcklColl.Collection), c) != 0 {
 			return
 		}
 		c.AbortWithStatus(http.StatusOK)
 		return
+	} else if c.Request.Method == "DELETE" {
+		if ex.DigestErr(devregColl.RemoveDeviceReg(serial), c) != 0 {
+			return
+		}
 	}
 
 }

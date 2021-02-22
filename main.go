@@ -54,16 +54,17 @@ func main() {
 	devices := r.Group("/devices")
 	devices.Use(lclDbConnect())
 
-	devices.POST("", handlers.HandlDevices)          // when creating new registrations
-	devices.GET("/:serial", handlers.HandlDevices)   // when getting existing registrations
-	devices.PATCH("/:serial", handlers.HandlDevices) // when modifying existing registration
+	devices.POST("", handlers.HandlDevices)           // when creating new registrations
+	devices.GET("/:serial", handlers.HandlDevices)    // when getting existing registrations
+	devices.PATCH("/:serial", handlers.HandlDevices)  // when modifying existing registration
+	devices.DELETE("/:serial", handlers.HandlDevices) // when modifying existing registration
 
 	// Users group
 	users := r.Group("/users")
 	users.Use(lclDbConnect())
 
-	users.POST("", handlers.HndlUsers)
-	users.GET("/:email", handlers.HandlUser)
+	users.POST("", handlers.HndlUsers)                                   // new user registrations
+	users.GET("/:email", handlers.HandlUser)                             // get user registration details
 	users.PUT("/:email", tokenParse(), verifyUser(), handlers.HandlUser) // changing the user account details
 	users.PATCH("/:email", b64UserCredsParse(), handlers.HandlUser)      // update password
 	// +++++++++ to delete an account you need elevated permission and authentication token
@@ -78,7 +79,7 @@ func main() {
 	// /authorize/?refresh=true
 	authrz := r.Group("/authorize")
 	authrz.Use(lclCacConnect()).Use(tokenParse())
-	authrz.GET("", handlers.HndlAuthrz)
-	authrz.DELETE("", handlers.HndlAuthrz)
+	authrz.GET("", handlers.HndlAuthrz)    // verifying the token ?lvl=2 ?refresh=true
+	authrz.DELETE("", handlers.HndlAuthrz) // logging the token out from the cache
 	log.Fatal(r.Run(":8080"))
 }

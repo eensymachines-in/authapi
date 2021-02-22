@@ -10,6 +10,7 @@ import (
 
 	b64 "encoding/base64"
 
+	"github.com/eensymachines-in/auth/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -223,4 +224,97 @@ func TestUser(t *testing.T) {
 	toks = refreshUser(toks["refr"], t, 200) // here the original refresh token shall be orphaned
 	t.Log(toks)
 	logoutUser(toks["auth"], toks["refr"], t)
+}
+
+func insertDeviceReg(reg *auth.DeviceReg, t *testing.T, expected int) {
+	url := "http://localhost:8080/devices"
+	body, _ := json.Marshal(reg)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	assert.Nil(t, err, "Unexepcted error when posting a new user account")
+	assert.NotNil(t, resp, "Unexpected nil response from server for posting a new account")
+	assert.Equal(t, expected, resp.StatusCode, "Was expecting a 200 ok on posting new user account")
+
+}
+func delDeviceReg(serial string, t *testing.T, expected int) {
+	url := fmt.Sprintf("http://localhost:8080/devices/%s", serial)
+	req, _ := http.NewRequest("DELETE", url, nil)
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+
+}
+func getDeviceReg(serial string, t *testing.T, expected int) {
+	url := fmt.Sprintf("http://localhost:8080/devices/%s", serial)
+	req, _ := http.NewRequest("GET", url, nil)
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+	if expected == 200 {
+		// Only if it is expected to be a 200 ok authentication
+		defer resp.Body.Close()
+		target := &auth.DeviceReg{}
+		if json.NewDecoder(resp.Body).Decode(&target) != nil {
+			t.Error("Failed to decode the authentication response containing tokenss")
+		}
+		t.Log(target)
+		return
+	}
+}
+func lockDeviceReg(serial string, t *testing.T, expected int) {
+	url := fmt.Sprintf("http://localhost:8080/devices/%s?lock=true", serial)
+	req, _ := http.NewRequest("PATCH", url, nil)
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+}
+func unlockDeviceReg(serial string, t *testing.T, expected int) {
+	url := fmt.Sprintf("http://localhost:8080/devices/%s?lock=false", serial)
+	req, _ := http.NewRequest("PATCH", url, nil)
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+}
+
+var reg = &auth.DeviceReg{
+	User:     "kneerun@someshit.com",
+	Hardware: "BCM2835, SoC Qualcomm",
+	Serial:   "b83ad4e3-60b2-4fbe-b46d",
+	Model:    "RaspberryPi 3B",
+}
+
+func TestBadDeviceRegInsert(t *testing.T) {
+	insertDeviceReg(reg, t, 400) // duplicate device insertion
+	newReg := &auth.DeviceReg{
+		User:     "",
+		Hardware: "BCM2835, SoC Qualcomm",
+		Serial:   "b83ad4e3-60b2-4fbe-b46d",
+		Model:    "RaspberryPi 3B",
+	} // the one in which the user email id is missing
+	insertDeviceReg(newReg, t, 400)
+	newReg = &auth.DeviceReg{
+		User:     "kneerun@someshit.com",
+		Hardware: "BCM2835, SoC Qualcomm",
+		Serial:   "",
+		Model:    "RaspberryPi 3B",
+	} //the one in which the serial number is missing
+	insertDeviceReg(newReg, t, 400)
+	newReg = &auth.DeviceReg{
+		User:     "kneerun@", // unregistered account
+		Hardware: "BCM2835, SoC Qualcomm",
+		Serial:   "b83ad4e3-60b2-4fbe-b46ff",
+		Model:    "RaspberryPi 3B",
+	} //the one in which the serial number is missing
+	insertDeviceReg(newReg, t, 400)
+}
+func TestDevices(t *testing.T) {
+	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
+	toks := authenticateUser(reg.User, "somepass@34355", t, 200)
+	insertDeviceReg(reg, t, 200)
+	TestBadDeviceRegInsert(t)
+
+	getDeviceReg(reg.Serial, t, 200)
+	lockDeviceReg(reg.Serial, t, 200)
+	unlockDeviceReg(reg.Serial, t, 200)
+	delDeviceReg(reg.Serial, t, 200)
+	delUser(reg.User, toks["auth"], t, 200)
 }
