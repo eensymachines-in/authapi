@@ -290,7 +290,7 @@ func TestBadDeviceRegInsert(t *testing.T) {
 		Serial:   "b83ad4e3-60b2-4fbe-b46d",
 		Model:    "RaspberryPi 3B",
 	} // the one in which the user email id is missing
-	insertDeviceReg(newReg, t, 400)
+	insertDeviceReg(newReg, t, 404)
 	newReg = &auth.DeviceReg{
 		User:     "kneerun@someshit.com",
 		Hardware: "BCM2835, SoC Qualcomm",
@@ -304,7 +304,7 @@ func TestBadDeviceRegInsert(t *testing.T) {
 		Serial:   "b83ad4e3-60b2-4fbe-b46ff",
 		Model:    "RaspberryPi 3B",
 	} //the one in which the serial number is missing
-	insertDeviceReg(newReg, t, 400)
+	insertDeviceReg(newReg, t, 404)
 }
 func TestDevices(t *testing.T) {
 	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
@@ -313,8 +313,16 @@ func TestDevices(t *testing.T) {
 	TestBadDeviceRegInsert(t)
 
 	getDeviceReg(reg.Serial, t, 200)
+	getDeviceReg("dd03f4a2-5962-434c", t, 404)
+
 	lockDeviceReg(reg.Serial, t, 200)
+	lockDeviceReg("dd03f4a2-5962-434c", t, 404)
+
 	unlockDeviceReg(reg.Serial, t, 200)
+	unlockDeviceReg("dd03f4a2-5962-434c", t, 404)
+
 	delDeviceReg(reg.Serial, t, 200)
+	delDeviceReg("dd03f4a2-5962-434c", t, 404)
+
 	delUser(reg.User, toks["auth"], t, 200)
 }
