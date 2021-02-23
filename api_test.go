@@ -326,3 +326,16 @@ func TestDevices(t *testing.T) {
 
 	delUser(reg.User, toks["auth"], t, 200)
 }
+
+func TestAccDel(t *testing.T) {
+	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
+	toks := authenticateUser(reg.User, "somepass@34355", t, 200)
+	insertDeviceReg(reg, t, 200)
+
+	delUser(reg.User, toks["auth"], t, 200)
+	insertDeviceReg(reg, t, 404)                                                                // user account is not found, hence would be rejected
+	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200) // so we try to register the account again
+	// but then the device is still blacklisted
+	insertDeviceReg(reg, t, 403)
+	delUser(reg.User, toks["auth"], t, 200)
+}

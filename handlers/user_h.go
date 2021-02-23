@@ -62,6 +62,7 @@ func HandlUser(c *gin.Context) {
 	userreg, _ := c.Get("userreg")
 	ua, _ := userreg.(*auth.UserAccounts)
 	email := c.Param("email")
+
 	if c.Request.Method == "GET" {
 		// Getting details of the user account
 		details, err := ua.AccountDetails(email)
@@ -71,7 +72,22 @@ func HandlUser(c *gin.Context) {
 		c.JSON(http.StatusOK, details)
 		return
 	} else if c.Request.Method == "DELETE" {
-		// FIXME: here before the request is executed a middle ware has to be consulted for the authorization level
+		val, _ := c.Get("devreg") // getting to the devreg collection
+		devreg := val.(*auth.DeviceRegColl)
+		devices, err := devreg.FindUserDevices(email)
+		if ex.DigestErr(err, c) != 0 {
+			return
+		}
+		val, _ = c.Get("devblacklist")
+		blckL := val.(*auth.BlacklistColl)
+		for _, d := range devices {
+			if ex.DigestErr(blckL.Black(&auth.Blacklist{Serial: d.Serial, Reason: "Account deleted, device is blacklisted"}), c) != 0 {
+				return
+			}
+			if ex.DigestErr(devreg.RemoveDeviceReg(d.Serial), c) != 0 {
+				return
+			}
+		}
 		if ex.DigestErr(ua.RemoveAccount(email), c) != 0 {
 			return
 		}
