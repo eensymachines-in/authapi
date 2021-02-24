@@ -260,16 +260,18 @@ func getDeviceReg(serial string, t *testing.T, expected int) {
 		return
 	}
 }
-func lockDeviceReg(serial string, t *testing.T, expected int) {
+func lockDeviceReg(serial, auth string, t *testing.T, expected int) {
 	url := fmt.Sprintf("http://localhost:8080/devices/%s?lock=true", serial)
 	req, _ := http.NewRequest("PATCH", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
 	resp, err := (&http.Client{}).Do(req)
 	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
 	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
 }
-func unlockDeviceReg(serial string, t *testing.T, expected int) {
+func unlockDeviceReg(serial, auth string, t *testing.T, expected int) {
 	url := fmt.Sprintf("http://localhost:8080/devices/%s?lock=false", serial)
 	req, _ := http.NewRequest("PATCH", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
 	resp, err := (&http.Client{}).Do(req)
 	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
 	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
@@ -306,6 +308,15 @@ func TestBadDeviceRegInsert(t *testing.T) {
 	} //the one in which the serial number is missing
 	insertDeviceReg(newReg, t, 404)
 }
+
+func blackUnblack(serial, auth string, black bool, t *testing.T, expected int) {
+	url := fmt.Sprintf("http://localhost:8080/devices/%s?black=%t", serial, black)
+	req, _ := http.NewRequest("PATCH", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+}
 func TestDevices(t *testing.T) {
 	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
 	toks := authenticateUser(reg.User, "somepass@34355", t, 200)
@@ -315,11 +326,11 @@ func TestDevices(t *testing.T) {
 	getDeviceReg(reg.Serial, t, 200)
 	getDeviceReg("dd03f4a2-5962-434c", t, 404)
 
-	lockDeviceReg(reg.Serial, t, 200)
-	lockDeviceReg("dd03f4a2-5962-434c", t, 404)
+	// lockDeviceReg(reg.Serial, t, 200)
+	// lockDeviceReg("dd03f4a2-5962-434c", t, 404)
 
-	unlockDeviceReg(reg.Serial, t, 200)
-	unlockDeviceReg("dd03f4a2-5962-434c", t, 404)
+	// unlockDeviceReg(reg.Serial, t, 200)
+	// unlockDeviceReg("dd03f4a2-5962-434c", t, 404)
 
 	delDeviceReg(reg.Serial, t, 200)
 	delDeviceReg("dd03f4a2-5962-434c", t, 404)
@@ -338,4 +349,15 @@ func TestAccDel(t *testing.T) {
 	// but then the device is still blacklisted
 	insertDeviceReg(reg, t, 403)
 	delUser(reg.User, toks["auth"], t, 200)
+}
+
+func TestLockUnlockDevice(t *testing.T) {
+	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
+	toks := authenticateUser(reg.User, "somepass@34355", t, 200)
+	insertDeviceReg(reg, t, 200)
+	lockDeviceReg(reg.Serial, toks["auth"], t, 200)
+	unlockDeviceReg(reg.Serial, toks["auth"], t, 200)
+
+	delUser(reg.User, toks["auth"], t, 200) // this will delete the user and then remove the devices too. but will also blacklist them
+	blackUnblack(reg.Serial, toks["auth"], false, t, 200)
 }

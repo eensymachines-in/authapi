@@ -80,14 +80,13 @@ func HandlDevices(c *gin.Context) {
 		c.AbortWithStatus(http.StatusOK)
 		return
 	} else if c.Request.Method == "POST" {
-		// FIXME: before the device is registered it would have to check if account has been registered
-
 		devReg := &auth.DeviceReg{}
 		if err := c.ShouldBindJSON(devReg); err != nil {
 			log.Errorf("handlDevices: Failed to bind device registration from request body %s", err)
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read device registration details, kindly check and send again"))
 			return
 		}
+		// Before we go ahead to register the device, the owner account has to be registered
 		col, _ := c.Get("userreg")
 		userReg := col.(*auth.UserAccounts)
 		if !userReg.IsRegistered(devReg.User) {
@@ -95,6 +94,7 @@ func HandlDevices(c *gin.Context) {
 			ex.DigestErr(ex.NewErr(&ex.ErrNotFound{}, fmt.Errorf("Unable to find the user account registered, %s", devReg.User), "User account isnt registered, cannot register device", "POST/devices"), c)
 			return
 		}
+		// Once we have it confirmed that owner account is registered, we can move ahead to insert the device registration
 		if ex.DigestErr(devregColl.InsertDeviceReg(devReg, blcklColl.Collection), c) != 0 {
 			return
 		}

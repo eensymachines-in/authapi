@@ -78,6 +78,7 @@ func HandlUser(c *gin.Context) {
 		if ex.DigestErr(err, c) != 0 {
 			return
 		}
+		// If a user account is deleted - all the owned devices shall be blacklisted and their registrations would be deleted
 		val, _ = c.Get("devblacklist")
 		blckL := val.(*auth.BlacklistColl)
 		for _, d := range devices {
