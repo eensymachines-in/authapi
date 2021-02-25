@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"os"
 
+	"github.com/eensymachines-in/auth/v2"
 	"github.com/eensymachines-in/authapi/handlers"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/mgo.v2"
 )
 
 func init() {
@@ -39,6 +41,37 @@ func init() {
 	}
 	os.Setenv("REFR_SECRET", string(line))
 	log.Infof("The refresh secret %s", os.Getenv("REFR_SECRET"))
+	// ++++++++++ Now reading the admin secret and creating a user if not already created
+	file1, err := os.Open("/run/secrets/admin_secret")
+	if err != nil {
+		log.Error("Failed to read the admin.secret, kindly load them before you run the container %s", err)
+	}
+	defer file1.Close()
+	reader = bufio.NewReader(file1)
+	line, _, err = reader.ReadLine()
+	if err != nil {
+		log.Error("Error reading the admin secret file, check the file for the expected contents")
+		return
+	}
+	os.Setenv("ADMIN_SECRET", string(line))
+
+}
+func seedAdminUserAccount() error {
+	session, err := mgo.Dial("srvmongo")
+	if err != nil {
+		log.Fatal("Could not seed the admin to the database")
+	}
+	ua := &auth.UserAccounts{Collection: session.DB("autolumin").C("userreg")}
+	if ua.IsRegistered("kneerunjun@gmail.com") {
+		return nil
+	}
+	// +++++++++ else we would want to register the user account
+
+	return ua.InsertAccount(&auth.UserAccDetails{Name: "Niranjan", Phone: "+918390906860", Loc: "Pune", UserAcc: auth.UserAcc{
+		Email:  "kneerunjun@gmail.com",
+		Passwd: os.Getenv("ADMIN_SECRET"),
+		Role:   2,
+	}})
 
 }
 func main() {
@@ -48,7 +81,10 @@ func main() {
 			"message": "pong",
 		})
 	})
-
+	//+++++++++++ now inserting the admin user if not already exists
+	if err := seedAdminUserAccount(); err != nil {
+		log.Fatalf("Failed to insert admin account seed, cannot continue %s", err)
+	}
 	r.Use(CORS)
 	// devices group
 	devices := r.Group("/devices")

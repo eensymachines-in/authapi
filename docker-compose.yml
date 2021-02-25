@@ -34,8 +34,11 @@ services:
         - "srvredis"
       secrets:
         - auth_secrets
+        - admin_secret
       container_name: authapi
       entrypoint: ["go", "run", "."]
 secrets:
   auth_secrets:
     file: ./api.secret
+  admin_secret:
+    file: ./admin.secret
