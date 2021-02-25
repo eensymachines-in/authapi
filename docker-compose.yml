@@ -3,8 +3,8 @@ version: '3.1'
 services:
     srvmongo:
       image: mongo:4.2-bionic
-      ports:
-          - 37017:27017
+      # ports:
+      #     - 37017:27017
       # environment:
       #   MONGO_INITDB_ROOT_USERNAME: root
       #   MONGO_INITDB_ROOT_PASSWORD: example
@@ -14,8 +14,8 @@ services:
       container_name: authapi_mongo
     srvredis:
       image: redis:6.0
-      ports:
-        - 6379:6379
+      # ports:
+      #   - 6379:6379
       tty: true
       stdin_open: true
       container_name: authapi_redis
