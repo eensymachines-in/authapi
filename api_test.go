@@ -14,6 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	testServer string = "http://localhost"
+)
+
 // ++++++++++++++++++++++++++++
 // Helper functions for testing
 // ++++++++++++++++++++++++++++
@@ -24,7 +28,7 @@ func authenticateUser(email, passwd string, t *testing.T, expected int) map[stri
 		"email":  email,
 		"passwd": passwd,
 	}
-	req, _ := http.NewRequest("POST", fmt.Sprintf("http://localhost:8080/authenticate/%s", creds["email"]), nil)
+	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/authenticate/%s", testServer, creds["email"]), nil)
 	encoded := b64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", creds["email"], creds["passwd"])))
 	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", encoded))
 	resp, err := (&http.Client{}).Do(req)
@@ -47,7 +51,7 @@ func authenticateUser(email, passwd string, t *testing.T, expected int) map[stri
 	return nil
 }
 func insertUser(email, passwd, name, loc, phone string, role int, t *testing.T, expected int) {
-	url := "http://localhost:8080/users"
+	url := fmt.Sprintf("%s/users", testServer)
 	ua := map[string]interface{}{
 		"email":  email,
 		"role":   role,
@@ -63,7 +67,7 @@ func insertUser(email, passwd, name, loc, phone string, role int, t *testing.T, 
 	assert.Equal(t, expected, resp.StatusCode, "Was expecting a 200 ok on posting new user account")
 }
 func putUser(email, name, loc, phone, auth string, t *testing.T, expected int) {
-	url := "http://localhost:8080/users"
+	url := fmt.Sprintf("%s/users", testServer)
 	ua := map[string]interface{}{
 		"email": email,
 		"name":  name,
@@ -81,7 +85,7 @@ func putUser(email, name, loc, phone, auth string, t *testing.T, expected int) {
 }
 
 func delUser(email, authTok string, t *testing.T, expected int) {
-	url := "http://localhost:8080/users"
+	url := fmt.Sprintf("%s/users", testServer)
 	client := &http.Client{}
 	req, _ := http.NewRequest("DELETE", fmt.Sprintf("%s/%s", url, email), nil)
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", authTok))
@@ -92,7 +96,7 @@ func delUser(email, authTok string, t *testing.T, expected int) {
 }
 
 func patchUser(email, passwd string, t *testing.T, expected int) {
-	url := "http://localhost:8080/users"
+	url := fmt.Sprintf("%s/users", testServer)
 	// +++++++++++ making a new request, imind you since this is about changing the password it'd be base 64 encoded
 	req, _ := http.NewRequest("PATCH", fmt.Sprintf("%s/%s", url, email), nil)
 	encoded := b64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", email, passwd)))
@@ -107,9 +111,9 @@ func patchUser(email, passwd string, t *testing.T, expected int) {
 func authorizeUser(auth string, t *testing.T, role, expected int) {
 	var req *http.Request
 	if role == 0 {
-		req, _ = http.NewRequest("GET", "http://localhost:8080/authorize", nil)
+		req, _ = http.NewRequest("GET", fmt.Sprintf("%s/authorize", testServer), nil)
 	} else {
-		req, _ = http.NewRequest("GET", fmt.Sprintf("http://localhost:8080/authorize?lvl=%d", role), nil)
+		req, _ = http.NewRequest("GET", fmt.Sprintf("%s/authorize?lvl=%d", testServer, role), nil)
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
 	resp, err := (&http.Client{}).Do(req)
@@ -119,7 +123,7 @@ func authorizeUser(auth string, t *testing.T, role, expected int) {
 }
 
 func refreshUser(refr string, t *testing.T, expected int) map[string]string {
-	req, _ := http.NewRequest("GET", "http://localhost:8080/authorize?refresh=true", nil)
+	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/authorize?refresh=true", testServer), nil)
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", refr))
 	resp, err := (&http.Client{}).Do(req)
 	assert.Nil(t, err, "Unexepcted error when authorizing the user account")
@@ -140,16 +144,75 @@ func refreshUser(refr string, t *testing.T, expected int) map[string]string {
 
 }
 func logoutUser(auth, refr string, t *testing.T) {
-	req, _ := http.NewRequest("DELETE", "http://localhost:8080/authorize", nil)
+	req, _ := http.NewRequest("DELETE", fmt.Sprintf("%s/authorize", testServer), nil)
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
 	(&http.Client{}).Do(req)
-	req, _ = http.NewRequest("DELETE", "http://localhost:8080/authorize?refresh=true", nil)
+	req, _ = http.NewRequest("DELETE", fmt.Sprintf("%s/authorize?refresh=true", testServer), nil)
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", refr))
 	(&http.Client{}).Do(req)
 }
+func insertDeviceReg(reg *auth.DeviceReg, t *testing.T, expected int) {
+	url := fmt.Sprintf("%s/devices", testServer)
+	body, _ := json.Marshal(reg)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	assert.Nil(t, err, "Unexepcted error when posting a new user account")
+	assert.NotNil(t, resp, "Unexpected nil response from server for posting a new account")
+	assert.Equal(t, expected, resp.StatusCode, "Was expecting a 200 ok on posting new user account")
+
+}
+func delDeviceReg(serial, auth string, t *testing.T, expected int) {
+	url := fmt.Sprintf("%s/devices/%s", testServer, serial)
+	req, _ := http.NewRequest("DELETE", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+
+}
+func getDeviceReg(serial string, t *testing.T, expected int) {
+	url := fmt.Sprintf("%s/devices/%s", testServer, serial)
+	req, _ := http.NewRequest("GET", url, nil)
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+	if expected == 200 {
+		// Only if it is expected to be a 200 ok authentication
+		defer resp.Body.Close()
+		target := &auth.DeviceReg{}
+		if json.NewDecoder(resp.Body).Decode(&target) != nil {
+			t.Error("Failed to decode the authentication response containing tokenss")
+		}
+		t.Log(target)
+		return
+	}
+}
+func lockDeviceReg(serial, auth string, t *testing.T, expected int) {
+	url := fmt.Sprintf("%s/devices/%s?lock=true", testServer, serial)
+	req, _ := http.NewRequest("PATCH", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+}
+func unlockDeviceReg(serial, auth string, t *testing.T, expected int) {
+	url := fmt.Sprintf("%s/devices/%s?lock=false", testServer, serial)
+	req, _ := http.NewRequest("PATCH", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+}
+func blackUnblack(serial, auth string, black bool, t *testing.T, expected int) {
+	url := fmt.Sprintf("%s/devices/%s?black=%t", testServer, serial, black)
+	req, _ := http.NewRequest("PATCH", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+}
 
 // Lets test all the bad passwords for the user accounts
-func TestBadUserInsert(t *testing.T) {
+func TBadUserInsert(t *testing.T) {
 	// +++++++++++++++ bad password combinations
 	insertUser("testuser@someshitdomain.com", "", "Niranjan Awati", "Pune, 411057", "+916734434353", 2, t, 400)
 	insertUser("testuser@someshitdomain.com", "dsfsdf", "Niranjan Awati", "Pune, 411057", "+916734434353", 2, t, 400)
@@ -166,10 +229,10 @@ func TestBadUserInsert(t *testing.T) {
 	insertUser("kissmyarse@someshitdomain.com", "unjun@41993", "Niranjan Awati", "Pune, 411057", "+915345sdfsfsdf", 2, t, 400)
 }
 
-func TestWrongAuth(t *testing.T) {
+func TWrongAuth(t *testing.T) {
 	// Wrong authentication
 	authenticateUser("kneerun@someshitdomain.com", "@41993", t, 401)
-	authenticateUser("bababocha@someshitdomain.com", "unjun@41993", t, 400)
+	authenticateUser("bababocha@someshitdomain.com", "unjun@41993", t, 404)
 	authenticateUser("kneerun@someshitdomain.com", "", t, 401)
 }
 
@@ -196,8 +259,8 @@ func TestUser(t *testing.T) {
 	t.Log(toks["auth"])
 	t.Log(toks["refr"])
 
-	TestWrongAuth(t)
-	TestBadUserInsert(t)
+	TWrongAuth(t)
+	TBadUserInsert(t)
 
 	// ++++++++++++
 	// putting new user details
@@ -224,57 +287,6 @@ func TestUser(t *testing.T) {
 	toks = refreshUser(toks["refr"], t, 200) // here the original refresh token shall be orphaned
 	t.Log(toks)
 	logoutUser(toks["auth"], toks["refr"], t)
-}
-
-func insertDeviceReg(reg *auth.DeviceReg, t *testing.T, expected int) {
-	url := "http://localhost:8080/devices"
-	body, _ := json.Marshal(reg)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
-	assert.Nil(t, err, "Unexepcted error when posting a new user account")
-	assert.NotNil(t, resp, "Unexpected nil response from server for posting a new account")
-	assert.Equal(t, expected, resp.StatusCode, "Was expecting a 200 ok on posting new user account")
-
-}
-func delDeviceReg(serial string, t *testing.T, expected int) {
-	url := fmt.Sprintf("http://localhost:8080/devices/%s", serial)
-	req, _ := http.NewRequest("DELETE", url, nil)
-	resp, err := (&http.Client{}).Do(req)
-	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
-	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
-
-}
-func getDeviceReg(serial string, t *testing.T, expected int) {
-	url := fmt.Sprintf("http://localhost:8080/devices/%s", serial)
-	req, _ := http.NewRequest("GET", url, nil)
-	resp, err := (&http.Client{}).Do(req)
-	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
-	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
-	if expected == 200 {
-		// Only if it is expected to be a 200 ok authentication
-		defer resp.Body.Close()
-		target := &auth.DeviceReg{}
-		if json.NewDecoder(resp.Body).Decode(&target) != nil {
-			t.Error("Failed to decode the authentication response containing tokenss")
-		}
-		t.Log(target)
-		return
-	}
-}
-func lockDeviceReg(serial, auth string, t *testing.T, expected int) {
-	url := fmt.Sprintf("http://localhost:8080/devices/%s?lock=true", serial)
-	req, _ := http.NewRequest("PATCH", url, nil)
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
-	resp, err := (&http.Client{}).Do(req)
-	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
-	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
-}
-func unlockDeviceReg(serial, auth string, t *testing.T, expected int) {
-	url := fmt.Sprintf("http://localhost:8080/devices/%s?lock=false", serial)
-	req, _ := http.NewRequest("PATCH", url, nil)
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
-	resp, err := (&http.Client{}).Do(req)
-	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
-	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
 }
 
 var reg = &auth.DeviceReg{
@@ -309,14 +321,6 @@ func TestBadDeviceRegInsert(t *testing.T) {
 	insertDeviceReg(newReg, t, 404)
 }
 
-func blackUnblack(serial, auth string, black bool, t *testing.T, expected int) {
-	url := fmt.Sprintf("http://localhost:8080/devices/%s?black=%t", serial, black)
-	req, _ := http.NewRequest("PATCH", url, nil)
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
-	resp, err := (&http.Client{}).Do(req)
-	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
-	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
-}
 func TestDevices(t *testing.T) {
 	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
 	toks := authenticateUser(reg.User, "somepass@34355", t, 200)
@@ -326,14 +330,14 @@ func TestDevices(t *testing.T) {
 	getDeviceReg(reg.Serial, t, 200)
 	getDeviceReg("dd03f4a2-5962-434c", t, 404)
 
-	// lockDeviceReg(reg.Serial, t, 200)
-	// lockDeviceReg("dd03f4a2-5962-434c", t, 404)
+	lockDeviceReg(reg.Serial, toks["auth"], t, 200)
+	lockDeviceReg("dd03f4a2-5962-434c", toks["auth"], t, 404)
 
-	// unlockDeviceReg(reg.Serial, t, 200)
-	// unlockDeviceReg("dd03f4a2-5962-434c", t, 404)
+	unlockDeviceReg(reg.Serial, toks["auth"], t, 200)
+	unlockDeviceReg("dd03f4a2-5962-434c", toks["auth"], t, 404)
 
-	delDeviceReg(reg.Serial, t, 200)
-	delDeviceReg("dd03f4a2-5962-434c", t, 404)
+	delDeviceReg(reg.Serial, toks["auth"], t, 200)
+	delDeviceReg("dd03f4a2-5962-434c", toks["auth"], t, 404)
 
 	delUser(reg.User, toks["auth"], t, 200)
 }
@@ -346,8 +350,13 @@ func TestAccDel(t *testing.T) {
 	delUser(reg.User, toks["auth"], t, 200)
 	insertDeviceReg(reg, t, 404)                                                                // user account is not found, hence would be rejected
 	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200) // so we try to register the account again
+	toks = authenticateUser(reg.User, "somepass@34355", t, 200)
 	// but then the device is still blacklisted
-	insertDeviceReg(reg, t, 403)
+	// so we then unblack the device
+	insertDeviceReg(reg, t, 403) // before unblacking the device inserting the device again is not possible
+	blackUnblack(reg.Serial, toks["auth"], false, t, 200)
+	insertDeviceReg(reg, t, 200) // same device registration now can be pushed
+	// and then again everything is deleted
 	delUser(reg.User, toks["auth"], t, 200)
 }
 

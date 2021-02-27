@@ -2,24 +2,31 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"os"
 
 	"github.com/eensymachines-in/auth/v2"
 	"github.com/eensymachines-in/authapi/handlers"
+	utl "github.com/eensymachines-in/utilities"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/mgo.v2"
 )
 
+var (
+	// /var/local/authapi : is mapped on the host machine
+	logFile = "/var/local/authapi/server.log"
+	// Flog : determines if the direction of log output
+	Flog bool
+	// FVerbose :  determines the level of log
+	FVerbose bool
+)
+
 func init() {
-	// log.SetFormatter(&log.JSONFormatter{})
-	log.SetFormatter(&log.TextFormatter{
-		DisableColors: false,
-		FullTimestamp: true,
-	})
-	log.SetReportCaller(true)
-	log.SetOutput(os.Stdout)
-	log.SetLevel(log.TraceLevel)
+	// log file - direction and level
+	utl.SetUpLog()
+	flag.BoolVar(&Flog, "flog", true, "direction of log messages, set false for terminal logging. Default is true")
+	flag.BoolVar(&FVerbose, "verbose", false, "Determines what level of log messages are to be output")
 	// +++++++++++++++++++ reading the secrets into the environment
 	file, err := os.Open("/run/secrets/auth_secrets")
 	if err != nil {
@@ -33,18 +40,18 @@ func init() {
 		log.Error("Error reading the auth secret from file")
 	}
 	os.Setenv("AUTH_SECRET", string(line))
-	log.Infof("The authentication secret %s", os.Getenv("AUTH_SECRET"))
+	// log.Infof("The authentication secret %s", os.Getenv("AUTH_SECRET"))
 	// ++++++++++++++++++++ reading in the refresh secret
 	line, _, err = reader.ReadLine()
 	if err != nil {
 		log.Error("Error reading the refr secret from file")
 	}
 	os.Setenv("REFR_SECRET", string(line))
-	log.Infof("The refresh secret %s", os.Getenv("REFR_SECRET"))
+	// log.Infof("The refresh secret %s", os.Getenv("REFR_SECRET"))
 	// ++++++++++ Now reading the admin secret and creating a user if not already created
 	file1, err := os.Open("/run/secrets/admin_secret")
 	if err != nil {
-		log.Error("Failed to read the admin.secret, kindly load them before you run the container %s", err)
+		log.Errorf("Failed to read the admin.secret, kindly load them before you run the container %s", err)
 	}
 	defer file1.Close()
 	reader = bufio.NewReader(file1)
@@ -54,8 +61,10 @@ func init() {
 		return
 	}
 	os.Setenv("ADMIN_SECRET", string(line))
-
 }
+
+// seedAdminUserAccount: without atleast one admin user there is no scope for adding accounts any further
+// will check for if already registered, if not then registers the same st away
 func seedAdminUserAccount() error {
 	session, err := mgo.Dial("srvmongo")
 	if err != nil {
@@ -66,7 +75,9 @@ func seedAdminUserAccount() error {
 		return nil
 	}
 	// +++++++++ else we would want to register the user account
-
+	// the password shall be picked from the environment of the guest machine
+	// the host machine shall have the file which is then loaded onto the guest machine at the run
+	// pushing the same onto the host machine though would be the job of the CI/CD
 	return ua.InsertAccount(&auth.UserAccDetails{Name: "Niranjan", Phone: "+918390906860", Loc: "Pune", UserAcc: auth.UserAcc{
 		Email:  "kneerunjun@gmail.com",
 		Passwd: os.Getenv("ADMIN_SECRET"),
@@ -75,17 +86,28 @@ func seedAdminUserAccount() error {
 
 }
 func main() {
+	// Setting the log direction and the level of log
+	flag.Parse()
+	closeLogFile := utl.CustomLog(Flog, FVerbose, logFile)
+	defer closeLogFile()
+	log.WithFields(log.Fields{
+		"flog":    Flog,
+		"verbose": FVerbose,
+	}).Info("Starting authapi module")
+
+	//+++++++++++ now inserting the admin user if not already exists
+	if err := seedAdminUserAccount(); err != nil {
+		log.Fatalf("Failed to insert admin account seed, cannot continue %s", err)
+	}
+	// ++++++++++++ Now setting up the routes
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+	r.Use(CORS)
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
-	//+++++++++++ now inserting the admin user if not already exists
-	if err := seedAdminUserAccount(); err != nil {
-		log.Fatalf("Failed to insert admin account seed, cannot continue %s", err)
-	}
-	r.Use(CORS)
 	// devices group
 	devices := r.Group("/devices")
 	devices.Use(lclDbConnect())
