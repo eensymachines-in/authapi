@@ -8,7 +8,6 @@ import (
 	auth "github.com/eensymachines-in/auth/v2"
 	ex "github.com/eensymachines-in/errx"
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 )
 
 func bindToUserAcc(c *gin.Context, result interface{}) error {
@@ -47,7 +46,7 @@ func HndlUsers(c *gin.Context) {
 			return
 		}
 		if ex.DigestErr(ua.InsertAccount(ud), c) != 0 {
-			log.Infof("just to log the account details %v", *ud)
+			// log.Infof("just to log the account details %v", *ud)
 			return
 		}
 		c.AbortWithStatus(http.StatusOK)
@@ -100,7 +99,7 @@ func HandlUser(c *gin.Context) {
 		// to change the password use the patch verb
 		newDetails := &auth.UserAccDetails{}
 		if c.ShouldBindJSON(newDetails) != nil {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details to be updated"))
+			ex.DigestErr(ex.NewErr(&ex.ErrJSONBind{}, fmt.Errorf("Failed to read account details to be updated"), "Invalid account details to alter, check and send again", "HandlUser/PUT"), c)
 			return
 		}
 		if ex.DigestErr(ua.UpdateAccDetails(newDetails), c) != 0 {
@@ -109,13 +108,6 @@ func HandlUser(c *gin.Context) {
 		c.AbortWithStatus(http.StatusOK)
 		return
 	} else if c.Request.Method == "PATCH" {
-		// altering the password here , this has a dedicated verb attached to it
-		// accPatch := &auth.UserAcc{}
-		// if err := c.ShouldBindJSON(accPatch); err != nil {
-		// 	log.Error(err)
-		// 	c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read account details, check and send again"))
-		// 	return
-		// }
 		// incase of a patch we are now getting this from the middleware
 		userEmail, _ := c.Get("email")
 		passwd, _ := c.Get("passwd") // we have extracted the email

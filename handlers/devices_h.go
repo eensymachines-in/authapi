@@ -8,7 +8,6 @@ import (
 	auth "github.com/eensymachines-in/auth/v2"
 	ex "github.com/eensymachines-in/errx"
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 )
 
 // HandlDevices : handler for the route /devices
@@ -27,9 +26,7 @@ func HandlDevices(c *gin.Context) {
 			return
 		}
 		if *status == (auth.DeviceStatus{}) {
-			// which means the serial number wasnt found as we have an empty result
-			log.Errorf("No deice with serial: %s found registered", serial)
-			c.AbortWithError(http.StatusNotFound, fmt.Errorf("No deice with serial: %s found registered", serial))
+			ex.DigestErr(ex.NewErr(&ex.ErrNotFound{}, fmt.Errorf("No deice with serial: %s found registered", serial), fmt.Sprintf("Failed to get device of serial %s", serial), "HandlDevices/empty devices"), c)
 			return
 		}
 		c.JSON(http.StatusOK, status) // we have the device status, we are 200OK here
@@ -57,8 +54,7 @@ func HandlDevices(c *gin.Context) {
 			// when the device needs to be blacklisted or whitelisted
 			value, err := strconv.ParseBool(black) //since the qparam is to be a boolean
 			if err != nil {
-				log.Errorf("Black status is invalid, expecting a bool value, got :%v", black)
-				c.AbortWithError(http.StatusBadRequest, fmt.Errorf("check black status, in the query params"))
+				ex.DigestErr(ex.NewErr(&ex.ErrInvalid{}, fmt.Errorf("Patching device: /devices/:serial?black=true is the correct format"), fmt.Sprintf("Black status is invalid, expecting a bool value, got :%v", black), "HandlDevices/PATCH"), c)
 				return
 			}
 			if value {
@@ -82,8 +78,7 @@ func HandlDevices(c *gin.Context) {
 	} else if c.Request.Method == "POST" {
 		devReg := &auth.DeviceReg{}
 		if err := c.ShouldBindJSON(devReg); err != nil {
-			log.Errorf("handlDevices: Failed to bind device registration from request body %s", err)
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to read device registration details, kindly check and send again"))
+			ex.DigestErr(ex.NewErr(&ex.ErrJSONBind{}, fmt.Errorf("handlDevices: Failed to bind device registration from request body %s", err), fmt.Sprintf("Failed to read device registration details, kindly check and send again"), "HandlDevices/PATCH"), c)
 			return
 		}
 		// Before we go ahead to register the device, the owner account has to be registered

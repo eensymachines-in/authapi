@@ -18,6 +18,16 @@ const (
 	testServer string = "http://localhost"
 )
 
+func readResponseBody(resp *http.Response, t *testing.T) map[string]interface{} {
+	defer resp.Body.Close()
+	target := map[string]interface{}{}
+	if json.NewDecoder(resp.Body).Decode(&target) != nil {
+		// t.Error("Failed to decode the authentication response containing tokenss")
+		return nil
+	}
+	return target
+}
+
 // ++++++++++++++++++++++++++++
 // Helper functions for testing
 // ++++++++++++++++++++++++++++
@@ -38,15 +48,11 @@ func authenticateUser(email, passwd string, t *testing.T, expected int) map[stri
 	assert.Equal(t, expected, resp.StatusCode, "Was expecting a 200 ok on posting new user account")
 	// ++++++++++ when the authentication is complete
 	if expected == 200 {
-		// When the authentication is success
-		defer resp.Body.Close()
-		target := map[string]string{}
-		if json.NewDecoder(resp.Body).Decode(&target) != nil {
-			t.Error("Failed to decode the authentication response containing tokenss")
-		}
-		t.Logf("Authentication token %s", target["auth"])
-		t.Logf("Refresh token %s", target["refr"])
-		return target
+		// Only when authentication is a success
+		data := readResponseBody(resp, t)
+		t.Logf("Authentication token %s", data["auth"])
+		t.Logf("Refresh token %s", data["refr"])
+		return map[string]string{"auth": fmt.Sprintf("%s", data["auth"]), "refr": fmt.Sprintf("%s", data["refr"])}
 	}
 	return nil
 }
@@ -78,10 +84,12 @@ func putUser(email, name, loc, phone, auth string, t *testing.T, expected int) {
 	req, _ := http.NewRequest("PUT", fmt.Sprintf("%s/%s", url, ua["email"]), bytes.NewBuffer(body))
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth))
 	resp, err := (&http.Client{}).Do(req)
-
 	assert.Nil(t, err, "Unexpected error making a put request")
 	assert.NotNil(t, resp, "Unexpected nil response from server")
 	assert.Equal(t, expected, resp.StatusCode, "Incorrect response status code")
+	if expected != 200 {
+		t.Log(readResponseBody(resp, t))
+	}
 }
 
 func delUser(email, authTok string, t *testing.T, expected int) {
@@ -93,6 +101,9 @@ func delUser(email, authTok string, t *testing.T, expected int) {
 	assert.Nil(t, err, "Unexpected error making a delete request")
 	assert.NotNil(t, resp, "Unexpected nil response from server")
 	assert.Equal(t, expected, resp.StatusCode, "Was expecting 200 response status code")
+	if expected != 200 {
+		t.Log(readResponseBody(resp, t))
+	}
 }
 
 func patchUser(email, passwd string, t *testing.T, expected int) {
@@ -106,6 +117,9 @@ func patchUser(email, passwd string, t *testing.T, expected int) {
 	assert.Nil(t, err, "Unexpected error making a patch request")
 	assert.NotNil(t, resp, "Unexpected nil response from server")
 	assert.Equal(t, expected, resp.StatusCode, "Was expecting 200 response status code")
+	if expected != 200 {
+		t.Log(readResponseBody(resp, t))
+	}
 }
 
 func authorizeUser(auth string, t *testing.T, role, expected int) {
@@ -120,6 +134,9 @@ func authorizeUser(auth string, t *testing.T, role, expected int) {
 	assert.Nil(t, err, "Unexepcted error when authorizing the user account")
 	assert.NotNil(t, resp, "Unexpected nil response from server authorizing an account")
 	assert.Equal(t, expected, resp.StatusCode, "Unexpected response when authorizing the user")
+	if expected != 200 {
+		t.Log(readResponseBody(resp, t))
+	}
 }
 
 func refreshUser(refr string, t *testing.T, expected int) map[string]string {
@@ -155,9 +172,13 @@ func insertDeviceReg(reg *auth.DeviceReg, t *testing.T, expected int) {
 	url := fmt.Sprintf("%s/devices", testServer)
 	body, _ := json.Marshal(reg)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+
 	assert.Nil(t, err, "Unexepcted error when posting a new user account")
 	assert.NotNil(t, resp, "Unexpected nil response from server for posting a new account")
 	assert.Equal(t, expected, resp.StatusCode, "Was expecting a 200 ok on posting new user account")
+	if expected != 200 {
+		t.Log(readResponseBody(resp, t))
+	}
 
 }
 func delDeviceReg(serial, auth string, t *testing.T, expected int) {
@@ -167,6 +188,11 @@ func delDeviceReg(serial, auth string, t *testing.T, expected int) {
 	resp, err := (&http.Client{}).Do(req)
 	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
 	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+	if expected != 200 {
+		t.Log(readResponseBody(resp, t))
+	} else {
+		t.Log(readResponseBody(resp, t))
+	}
 
 }
 func getDeviceReg(serial string, t *testing.T, expected int) {
@@ -184,6 +210,8 @@ func getDeviceReg(serial string, t *testing.T, expected int) {
 		}
 		t.Log(target)
 		return
+	} else {
+		t.Log(readResponseBody(resp, t))
 	}
 }
 func lockDeviceReg(serial, auth string, t *testing.T, expected int) {
@@ -193,6 +221,9 @@ func lockDeviceReg(serial, auth string, t *testing.T, expected int) {
 	resp, err := (&http.Client{}).Do(req)
 	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
 	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+	if expected != 200 {
+		t.Log(readResponseBody(resp, t))
+	}
 }
 func unlockDeviceReg(serial, auth string, t *testing.T, expected int) {
 	url := fmt.Sprintf("%s/devices/%s?lock=false", testServer, serial)
@@ -201,6 +232,9 @@ func unlockDeviceReg(serial, auth string, t *testing.T, expected int) {
 	resp, err := (&http.Client{}).Do(req)
 	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
 	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+	if expected != 200 {
+		t.Log(readResponseBody(resp, t))
+	}
 }
 func blackUnblack(serial, auth string, black bool, t *testing.T, expected int) {
 	url := fmt.Sprintf("%s/devices/%s?black=%t", testServer, serial, black)
@@ -209,6 +243,9 @@ func blackUnblack(serial, auth string, black bool, t *testing.T, expected int) {
 	resp, err := (&http.Client{}).Do(req)
 	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
 	assert.Equal(t, expected, resp.StatusCode, "Unexpected response code when delDeviceReg")
+	if expected != 200 {
+		t.Log(readResponseBody(resp, t))
+	}
 }
 
 // Lets test all the bad passwords for the user accounts
@@ -243,8 +280,8 @@ func TPutBadUser(t *testing.T, authtok string) {
 	putUser("kneerun@someshitdomain.com", "nigga fat arse", "your momas big fat arse", "", authtok, t, 400)
 	putUser("kneerun@someshitdomain.com", "nigga fat arse", "your momas big fat arse", "+91fdsffdjj", authtok, t, 400)
 	putUser("kneerun@someshitdomain.com", "nigga fat arse", "your momas big fat arse", "+91fdsffdjj5345", authtok, t, 400)
-	// Since the email and the token would not match - this is flagged as forbidden
-	putUser("randomguy@someshitdomain.com", "nigga fat arse", "", "", authtok, t, 403)
+	// Since the email and the token would not match - this is flagged as unauthorized
+	putUser("randomguy@someshitdomain.com", "nigga fat arse", "", "", authtok, t, 401)
 }
 
 func TPatchBadPasswd(t *testing.T) {
@@ -297,6 +334,8 @@ var reg = &auth.DeviceReg{
 }
 
 func TestBadDeviceRegInsert(t *testing.T) {
+	// ++++++++++++++ THIS WILL NOT WORK +++++++++++++
+	// since the user is not registered, the device cannot be registered
 	insertDeviceReg(reg, t, 400) // duplicate device insertion
 	newReg := &auth.DeviceReg{
 		User:     "",
@@ -342,10 +381,15 @@ func TestDevices(t *testing.T) {
 	delUser(reg.User, toks["auth"], t, 200)
 }
 
-func TestAccDel(t *testing.T) {
+// TestUsrAccToDevices: this shall test all the user account to devices relation
+// When an account is deleted, the devices owned by the account are stripped off their registration and blacklisted
+// if the same device has to be re-deployed it has to be explicitly white listed by an admin
+func TestUsrAccToDevices(t *testing.T) {
 	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
 	toks := authenticateUser(reg.User, "somepass@34355", t, 200)
 	insertDeviceReg(reg, t, 200)
+	lockDeviceReg(reg.Serial, toks["auth"], t, 200)
+	unlockDeviceReg(reg.Serial, toks["auth"], t, 200)
 
 	delUser(reg.User, toks["auth"], t, 200)
 	insertDeviceReg(reg, t, 404)                                                                // user account is not found, hence would be rejected
@@ -358,15 +402,4 @@ func TestAccDel(t *testing.T) {
 	insertDeviceReg(reg, t, 200) // same device registration now can be pushed
 	// and then again everything is deleted
 	delUser(reg.User, toks["auth"], t, 200)
-}
-
-func TestLockUnlockDevice(t *testing.T) {
-	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
-	toks := authenticateUser(reg.User, "somepass@34355", t, 200)
-	insertDeviceReg(reg, t, 200)
-	lockDeviceReg(reg.Serial, toks["auth"], t, 200)
-	unlockDeviceReg(reg.Serial, toks["auth"], t, 200)
-
-	delUser(reg.User, toks["auth"], t, 200) // this will delete the user and then remove the devices too. but will also blacklist them
-	blackUnblack(reg.Serial, toks["auth"], false, t, 200)
 }

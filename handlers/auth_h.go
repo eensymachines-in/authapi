@@ -16,12 +16,14 @@ import (
 func getTknCacFromCtx(c *gin.Context) (*auth.TokenCache, func()) {
 	val, exists := c.Get("cache")
 	if !exists {
-		c.AbortWithStatus(http.StatusBadGateway)
+		// c.AbortWithStatus(http.StatusBadGateway)
+		ex.DigestErr(ex.NewErr(&ex.ErrConnFailed{}, fmt.Errorf("No cache connection found middleware"), "One or more gateways on the server has failed", "getTknCacFromCtx"), c)
 		return nil, nil
 	}
 	tokCach := val.(*auth.TokenCache)
 	if tokCach == nil {
-		c.AbortWithStatus(http.StatusBadGateway)
+		ex.DigestErr(ex.NewErr(&ex.ErrConnFailed{}, fmt.Errorf("Invalid type of cache connection in middleware"), "One or more gateways on the server has failed", "getTknCacFromCtx"), c)
+		// c.AbortWithStatus(http.StatusBadGateway)
 		return nil, nil
 	}
 	val, _ = c.Get("cache_close")
@@ -34,7 +36,8 @@ func getTknCacFromCtx(c *gin.Context) (*auth.TokenCache, func()) {
 func getTknFromCtx(c *gin.Context) *auth.JWTok {
 	val, exists := c.Get("token")
 	if !exists {
-		c.AbortWithStatus(http.StatusUnauthorized)
+		ex.DigestErr(ex.NewErr(&ex.ErrInsuffPrivlg{}, fmt.Errorf("No token string found in header"), "This request requires authorization, no authorization was provided", "getTknFromCtx"), c)
+		// c.AbortWithStatus(http.StatusUnauthorized)
 		return nil
 	}
 	return val.(*auth.JWTok)
@@ -45,6 +48,9 @@ func HndlAuthrz(c *gin.Context) {
 	// +++++++++++++++++++++++++++
 	// Now getting the cache handle
 	tokCach, cacClose := getTknCacFromCtx(c)
+	if tokCach == nil {
+		return
+	}
 	defer cacClose()
 	if c.Request.Method == "GET" {
 		if c.Query("refresh") == "true" {
@@ -75,16 +81,8 @@ func HndlAuthrz(c *gin.Context) {
 func HandlAuth(c *gin.Context) {
 	// +++++++++++++++++++++++++
 	// Getting the database handle
-	val, exists := c.Get("userreg")
-	if !exists {
-		c.AbortWithStatus(http.StatusBadGateway)
-		return
-	}
+	val, _ := c.Get("userreg")
 	usrRegColl, _ := val.(*auth.UserAccounts)
-	if usrRegColl == nil {
-		c.AbortWithStatus(http.StatusBadGateway)
-		return
-	}
 	val, _ = c.Get("close_session")
 	dbSessClose := val.(func())
 	defer dbSessClose()
@@ -92,20 +90,12 @@ func HandlAuth(c *gin.Context) {
 	// +++++++++++++++++++++++++++
 	// Now getting the cache handle
 	tokCach, cacClose := getTknCacFromCtx(c)
+	if tokCach == nil {
+		return
+	}
 	defer cacClose()
 	// ++++++++++++++++++++++++++++
-	// getting the user param
-	// email := c.Param("email")
-	// if email == "" {
-	// 	c.AbortWithStatus(http.StatusBadGateway)
-	// 	return
-	// }
-	// creds := &auth.UserAcc{}
-	// if ex.DigestErr(c.ShouldBindJSON(creds), c) != 0 {
-	// 	c.AbortWithError(http.StatusBadRequest, fmt.Errorf("Failed to bind user account credentials from the request"))
-	// 	return
-	// }
-	// +++++++++ now that the middleware is taking this up
+	// +++++++++ from b64UserCredsParse middleware
 	e, _ := c.Get("email")
 	p, _ := c.Get("passwd")
 	creds := &auth.UserAcc{Email: fmt.Sprintf("%v", e), Passwd: fmt.Sprintf("%v", p)}

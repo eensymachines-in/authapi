@@ -44,7 +44,6 @@ func readAuthHeader(c *gin.Context, authfield string, hdrValRead func(string) er
 	if authHeader == "" {
 		return ex.NewErr(&ex.ErrInvalid{}, nil, "Authorization header is empty", "readAuthHeader/c.GetHeader()")
 	}
-
 	// Please see the " " after authfield, do not include from client code
 	parts := strings.Split(authHeader, " ") // Bearer or Basic depending on if its token or the credentials
 	if len(parts) != 2 {
@@ -81,7 +80,7 @@ func b64UserCredsParse() gin.HandlerFunc {
 		}
 		if email == "" || passwd == "" {
 			// ++++++++++ incase the readAuthHeader read out empty creds
-			c.AbortWithError(http.StatusUnauthorized, fmt.Errorf("Empty credentials, cannot go ahead"))
+			ex.DigestErr(ex.NewErr(&ex.ErrLogin{}, err, "Invalid credentials in the request authorization", "b64UserCredsParse/readAuthHeader"), c)
 			return
 		}
 		// ++++++++++++ user email and password are all set and ready to go
@@ -128,7 +127,7 @@ func tokenParse() gin.HandlerFunc {
 					return
 				}
 				if !tok.HasElevation(level) {
-					c.AbortWithStatus(http.StatusForbidden)
+					ex.DigestErr(ex.NewErr(&ex.ErrInsuffPrivlg{}, fmt.Errorf("Role of the user does not have sufficient elevation"), "Insufficient privileges to perform this action", "tokenParse/HasElevation"), c)
 					return
 				}
 			}
@@ -143,12 +142,12 @@ func verifyUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		val, exists := c.Get("token")
 		if !exists || val == nil {
-			c.AbortWithError(http.StatusForbidden, fmt.Errorf("No authorization found on the request that mandates it"))
+			ex.DigestErr(ex.NewErr(&ex.ErrInsuffPrivlg{}, fmt.Errorf("No authorization token found on the request that mandates it"), "This request needs authorization. Login again", "verifyUser/exists"), c)
 			return
 		}
 		tok := val.(*auth.JWTok)
 		if !(tok.User == c.Param("email")) {
-			c.AbortWithError(http.StatusForbidden, fmt.Errorf("Unverified user. Sign in again to perform this action"))
+			ex.DigestErr(ex.NewErr(&ex.ErrLogin{}, fmt.Errorf("Token owner mismatches request param"), "There seems to be an issue with your authorization. You are advised to logout and login again", "verifyUser"), c)
 			return
 		}
 	}
@@ -159,12 +158,12 @@ func verifyRole(elevation int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		val, exists := c.Get("token")
 		if !exists || val == nil {
-			c.AbortWithError(http.StatusForbidden, fmt.Errorf("No authorization found on the request that mandates it"))
+			ex.DigestErr(ex.NewErr(&ex.ErrInsuffPrivlg{}, fmt.Errorf("No authorization token found on the request that mandates it"), "This request needs authorization. Login again using admin role", "verifyRole/exists"), c)
 			return
 		}
 		tok := val.(*auth.JWTok)
 		if !tok.HasElevation(elevation) {
-			c.AbortWithError(http.StatusForbidden, fmt.Errorf("Not enough elevation found on your role"))
+			ex.DigestErr(ex.NewErr(&ex.ErrInsuffPrivlg{}, fmt.Errorf("Role of the user does not have sufficient elevation"), "Insufficient privileges to perform this action", "verifyRole/HasElevation"), c)
 			return
 		}
 	}
@@ -178,8 +177,9 @@ func lclCacConnect() gin.HandlerFunc {
 			Password: "", // no password set
 			DB:       0,  // use default DB
 		})}
-		if ex.DigestErr(tkCac.Ping(), c) != 0 {
-			return
+		err := tkCac.Ping()
+		if err != nil {
+			ex.DigestErr(ex.NewErr(&ex.ErrConnFailed{}, err, "Server failed to connect to one of its services. Hang in till one of our admins fixes it", "lclCacConnect"), c)
 		}
 		c.Set("cache", tkCac)
 		c.Set("cache_close", func() {
@@ -203,24 +203,25 @@ func lclDbConnect() gin.HandlerFunc {
 		// Incase the gateway fails and the database connection is not established we have to abort
 		coll := session.DB("autolumin").C("devreg")
 		if coll == nil {
-			log.Error("Failed to get collection - 'devreg'")
-			c.AbortWithError(http.StatusGatewayTimeout, fmt.Errorf("Failed db connection"))
+			ex.DigestErr(ex.NewErr(&ex.ErrConnFailed{}, fmt.Errorf("Failed to connect to autolumin database"), "Server failed to connect to one of its services. Hang in till one of our admins fixes it", "lclDbConnect:autolumin/devreg"), c)
+			// log.Error("Failed to get collection - 'devreg'")
+			// c.AbortWithError(http.StatusGatewayTimeout, fmt.Errorf("Failed db connection"))
 			return
 		}
 		c.Set("devreg", &auth.DeviceRegColl{Collection: coll})
 
 		coll = session.DB("autolumin").C("devblacklist")
 		if coll == nil {
-			log.Error("Failed to get collection - 'devblacklist'")
-			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed database collection connection"))
+			ex.DigestErr(ex.NewErr(&ex.ErrConnFailed{}, fmt.Errorf("Failed to connect to autolumin database"), "Server failed to connect to one of its services. Hang in till one of our admins fixes it", "lclDbConnect:autolumin/devblacklist"), c)
+			// log.Error("Failed to get collection - 'devblacklist'")
+			// c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed database collection connection"))
 			return
 		}
 		c.Set("devblacklist", &auth.BlacklistColl{Collection: coll})
 		// User account registration acocunt
 		coll = session.DB("autolumin").C("userreg")
 		if coll == nil {
-			log.Error("Failed to get collection - 'userreg'")
-			c.AbortWithError(http.StatusBadGateway, fmt.Errorf("Failed database collection connection"))
+			ex.DigestErr(ex.NewErr(&ex.ErrConnFailed{}, fmt.Errorf("Failed to connect to autolumin database"), "Server failed to connect to one of its services. Hang in till one of our admins fixes it", "lclDbConnect:autolumin/userreg"), c)
 			return
 		}
 		c.Set("userreg", &auth.UserAccounts{Collection: coll})
