@@ -115,15 +115,18 @@ func main() {
 	devices.POST("", handlers.HandlDevices)        // when creating new registrations
 	devices.GET("/:serial", handlers.HandlDevices) // when getting existing registrations
 	// When the device registration has to be modified or deleted
-	devices.PATCH("/:serial", tokenParse(), verifyRole(2), handlers.HandlDevices)
+	devices.PATCH("/:serial", tokenParse(), verifyRole(1), handlers.HandlDevices)
 	devices.DELETE("/:serial", tokenParse(), verifyRole(2), handlers.HandlDevices)
 
 	// Users group
 	users := r.Group("/users")
 	users.Use(lclDbConnect())
 
-	users.POST("", handlers.HndlUsers)                                   // new user registrations
-	users.GET("/:email", handlers.HandlUser)                             // get user registration details
+	users.POST("", handlers.HndlUsers)                             // new user registrations
+	users.GET("", tokenParse(), verifyRole(2), handlers.HndlUsers) // enlisting the user accounts
+	users.GET("/:email", handlers.HandlUser)                       // get user registration details
+	users.GET("/:email/devices", handlers.HandlUsrDevices)         // get all the user devices
+
 	users.PUT("/:email", tokenParse(), verifyUser(), handlers.HandlUser) // changing the user account details
 	users.PATCH("/:email", b64UserCredsParse(), handlers.HandlUser)      // update password
 	// +++++++++ to delete an account you need elevated permission and authentication token

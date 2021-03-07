@@ -37,7 +37,7 @@ services:
         - auth_secrets
         - admin_secret
       container_name: authapi
-      entrypoint: ["go", "run", ".", "-flog=true", "-verbose=true"]
+      entrypoint: ["go", "run", ".", "-flog=false", "-verbose=true"]
 secrets:
   auth_secrets:
     file: ./api.secret

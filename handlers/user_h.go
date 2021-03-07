@@ -3,6 +3,7 @@ package handlers
 // All the user route handlers here
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	auth "github.com/eensymachines-in/auth/v2"
@@ -33,6 +34,26 @@ func bindToUserAcc(c *gin.Context, result interface{}) error {
 	return nil
 }
 
+// HandlUsrDevices : for user the devices this serves as route handelr
+func HandlUsrDevices(c *gin.Context) {
+	closeSession, _ := c.Get("close_session")
+	defer closeSession.(func())() // this closes the db session when done
+	val, _ := c.Get("devreg")
+	dr := val.(*auth.DeviceRegColl) // we will query this
+	email := c.Param("email")
+	if c.Request.Method == "GET" {
+		// trying to get all the devices of a certain user
+		stati, err := dr.FindUserDevices(email)
+		if err != nil {
+			ex.DigestErr(err, c)
+			return
+		}
+		log.Printf("user devices %v", stati)
+		c.JSON(http.StatusOK, stati)
+		return
+	}
+}
+
 // HndlUsers : handler for user acocunts as a collection and not specifc user
 func HndlUsers(c *gin.Context) {
 	closeSession, _ := c.Get("close_session")
@@ -50,6 +71,15 @@ func HndlUsers(c *gin.Context) {
 			return
 		}
 		c.AbortWithStatus(http.StatusOK)
+		return
+	} else if c.Request.Method == "GET" {
+		result := []auth.UserAccDetails{}
+		// in one large dump this will pick the user accounts and dispatch them to the result
+		// we need to add this new Enlist function in auth package
+		if ex.DigestErr(ua.Enlist(&result), c) != 0 {
+			return
+		}
+		c.JSON(http.StatusOK, result)
 		return
 	}
 }
@@ -71,28 +101,40 @@ func HandlUser(c *gin.Context) {
 		c.JSON(http.StatusOK, details)
 		return
 	} else if c.Request.Method == "DELETE" {
-		val, _ := c.Get("devreg") // getting to the devreg collection
-		devreg := val.(*auth.DeviceRegColl)
-		devices, err := devreg.FindUserDevices(email)
-		if ex.DigestErr(err, c) != 0 {
+		details, err := ua.AccountDetails(email)
+		if err != nil {
+			ex.DigestErr(err, c)
 			return
 		}
-		// If a user account is deleted - all the owned devices shall be blacklisted and their registrations would be deleted
-		val, _ = c.Get("devblacklist")
-		blckL := val.(*auth.BlacklistColl)
-		for _, d := range devices {
-			if ex.DigestErr(blckL.Black(&auth.Blacklist{Serial: d.Serial, Reason: "Account deleted, device is blacklisted"}), c) != 0 {
+		if details.Role < 2 {
+			// Only if the user account is not of an admin
+			// admin accounts cannot be deleted
+			val, _ := c.Get("devreg") // getting to the devreg collection
+			devreg := val.(*auth.DeviceRegColl)
+			devices, err := devreg.FindUserDevices(email)
+			if ex.DigestErr(err, c) != 0 {
 				return
 			}
-			if ex.DigestErr(devreg.RemoveDeviceReg(d.Serial), c) != 0 {
+			// If a user account is deleted - all the owned devices shall be blacklisted and their registrations would be deleted
+			val, _ = c.Get("devblacklist")
+			blckL := val.(*auth.BlacklistColl)
+			for _, d := range devices {
+				if ex.DigestErr(blckL.Black(&auth.Blacklist{Serial: d.Serial, Reason: "Account deleted, device is blacklisted"}), c) != 0 {
+					return
+				}
+				if ex.DigestErr(devreg.RemoveDeviceReg(d.Serial), c) != 0 {
+					return
+				}
+			}
+			if ex.DigestErr(ua.RemoveAccount(email), c) != 0 {
 				return
 			}
-		}
-		if ex.DigestErr(ua.RemoveAccount(email), c) != 0 {
+			c.AbortWithStatus(http.StatusOK)
 			return
 		}
-		c.AbortWithStatus(http.StatusOK)
+		ex.DigestErr(ex.NewErr(&ex.ErrInsuffPrivlg{}, fmt.Errorf("Trying to delete admin account %s", email), "Admin accounts are immune to deletion, will not proceed", "HandlUser/DEL"), c)
 		return
+
 	} else if c.Request.Method == "PUT" {
 		// changing all the account details given the email id
 		// IMP: this does not change the password of the account,

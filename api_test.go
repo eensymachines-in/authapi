@@ -288,42 +288,107 @@ func TPatchBadPasswd(t *testing.T) {
 	patchUser("kneerun@someshitdomain.com", "", t, 401)
 }
 
-func TestUser(t *testing.T) {
-	// Insert a legit user
+func TestEnlistingAccs(t *testing.T) {
 	insertUser("kneerun@someshitdomain.com", "unjun@41993", "Niranjan Awati", "Pune, 411057", "+916734434353", 2, t, 200)
 	toks := authenticateUser("kneerun@someshitdomain.com", "unjun@41993", t, 200)
-	t.Log("After successful authentication")
-	t.Log(toks["auth"])
-	t.Log(toks["refr"])
 
+	url := fmt.Sprintf("%s/users", testServer)
+
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", toks["auth"]))
+	resp, err := (&http.Client{}).Do(req)
+	// happy requst, this should sail thru - till ofcourse you clear the database
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, 200, resp.StatusCode, "Unexpected response code when TestEnlistingAccs")
+	if resp.StatusCode == 200 {
+		defer resp.Body.Close()
+		target := []map[string]interface{}{}
+		if json.NewDecoder(resp.Body).Decode(&target) != nil {
+			panic("Error reading the accounts enlisting")
+		}
+		t.Log(target)
+	}
+	// now we send in the request without any authorization
+	req, _ = http.NewRequest("GET", url, nil)
+	resp, err = (&http.Client{}).Do(req)
+	resp, err = (&http.Client{}).Do(req)
+	// expected response code is 401, since this req requires the user to have admin privileges
+	assert.Equal(t, 400, resp.StatusCode, "Unexpected response code when TestEnlistingAccs")
+	<-time.After(72 * time.Second)
+	// Now the authentication token should have expired
+	req, _ = http.NewRequest("GET", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", toks["auth"]))
+	resp, err = (&http.Client{}).Do(req)
+	assert.Equal(t, 401, resp.StatusCode, "Unexpected response code when TestEnlistingAccs")
+	// Here we try to add an user with lower privileges
+	insertUser("kneerun@modafucka.com", "unjun@41993", "Niranjan Awati", "Pune, 411057", "+916734434353", 1, t, 200)
+	toks = authenticateUser("kneerun@modafucka.com", "unjun@41993", t, 200)
+	req, _ = http.NewRequest("GET", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", toks["auth"]))
+	resp, err = (&http.Client{}).Do(req)
+	assert.Equal(t, 403, resp.StatusCode, "Unexpected response code when TestEnlistingAccs")
+	/*CLEAR THE DATABASE*/
+}
+
+func TestDeleteAccs(t *testing.T) {
+	insertUser("kneerun@someshitdomain.com", "unjun@41993", "Niranjan Awati", "Pune, 411057", "+916734434353", 2, t, 200)
+	toks := authenticateUser("kneerun@someshitdomain.com", "unjun@41993", t, 200)
+	insertUser("kneerun@modafucka.com", "unjun@41993", "Niranjan Awati", "Pune, 411057", "+916734434353", 1, t, 200)
+
+	url := fmt.Sprintf("%s/users/%s", testServer, "kneerun@modafucka.com")
+	req, _ := http.NewRequest("DELETE", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", toks["auth"]))
+	resp, _ := (&http.Client{}).Do(req)
+	assert.Equal(t, 200, resp.StatusCode, "Unexpected response code when TestDeleteAccs")
+
+	url = fmt.Sprintf("%s/users/%s", testServer, "kneerun@someshitdomain.com")
+	req, _ = http.NewRequest("DELETE", url, nil)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", toks["auth"]))
+	resp, _ = (&http.Client{}).Do(req)
+	assert.Equal(t, 403, resp.StatusCode, "Unexpected response code when TestDeleteAccs")
+}
+
+func adminToks(t *testing.T) map[string]string {
+	return authenticateUser("kneerunjun@gmail.com", "106456!41993", t, 200)
+}
+
+func TestUserAccountsOnly(t *testing.T) {
+	// Insert a legit user
+	insertUser("kneerun@someshitdomain.com", "unjun@41993", "Niranjan Awati", "Pune, 411057", "+916734434353", 1, t, 200)
+	thissUserToks := authenticateUser("kneerun@someshitdomain.com", "unjun@41993", t, 200)
 	TWrongAuth(t)
 	TBadUserInsert(t)
-
 	// ++++++++++++
 	// putting new user details
-	putUser("kneerun@someshitdomain.com", "NewShitName", "Pune, 411038", "+91534589885435", toks["auth"], t, 200)
-	TPutBadUser(t, toks["auth"])
+	putUser("kneerun@someshitdomain.com", "NewShitName", "Pune, 411038", "+91534589885435", thissUserToks["auth"], t, 200)
+	TPutBadUser(t, thissUserToks["auth"])
 
 	// // ++++++++++++++
 	// // patching the use for the password
 	patchUser("kneerun@someshitdomain.com", "unjun@41993!@", t, 200)
 	TPatchBadPasswd(t)
-	toks = authenticateUser("kneerun@someshitdomain.com", "unjun@41993!@", t, 200)
-	authorizeUser(toks["auth"], t, 2, 200)
-	authorizeUser(toks["auth"], t, 1, 200) // the user is already at level 2
-	authorizeUser(toks["auth"], t, 3, 403) // when the user is not elevated enough
+	thissUserToks = authenticateUser("kneerun@someshitdomain.com", "unjun@41993!@", t, 200)
+
+	authorizeUser(thissUserToks["auth"], t, 1, 200) // the user is already at level 2
+	authorizeUser(thissUserToks["auth"], t, 2, 403)
+	authorizeUser(thissUserToks["auth"], t, 3, 403) // when the user is not elevated enough
+
 	// Here we try to remove the user with requisite authentication
-	delUser("kneerun@someshitdomain.com", toks["auth"], t, 200)
-	// // since below we are using the token from kneerun@someshitdomain.com and trying to delete modafucka@someshitdomain.com this will forbid the request
-	// // and rightly so
-	delUser("modafucka@someshitdomain.com", toks["auth"], t, 200) //trying to delete an user that's not registered
+	// We need admin authrization to delete any user
+	adminAuth := adminToks(t)
+	delUser("kneerun@someshitdomain.com", adminAuth["auth"], t, 200)
+	// // // since below we are using the token from kneerun@someshitdomain.com and trying to delete modafucka@someshitdomain.com this will forbid the request
+	// // // and rightly so
+	delUser("modafucka@someshitdomain.com", adminAuth["auth"], t, 404) //trying to delete an user that's not registered
 	<-time.After(72 * time.Second)
 
-	authorizeUser(toks["auth"], t, 2, 401)
-	// // +++++++++++ time to see if we can refresh the tokens
-	toks = refreshUser(toks["refr"], t, 200) // here the original refresh token shall be orphaned
-	t.Log(toks)
-	logoutUser(toks["auth"], toks["refr"], t)
+	authorizeUser(thissUserToks["auth"], t, 1, 401)
+	// +++++++++++ time to see if we can refresh the tokens
+	thissUserToks = refreshUser(thissUserToks["refr"], t, 200) // here the original refresh token shall be orphaned
+	t.Log("Tokens refreshed ..............")
+	t.Log(thissUserToks)
+	logoutUser(thissUserToks["auth"], thissUserToks["refr"], t)
+	// There's one more when the token is expired, logout will emit 401
 }
 
 var reg = &auth.DeviceReg{
@@ -359,7 +424,23 @@ func TestBadDeviceRegInsert(t *testing.T) {
 	} //the one in which the serial number is missing
 	insertDeviceReg(newReg, t, 404)
 }
-
+func TestUserDevices(t *testing.T) {
+	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
+	authenticateUser(reg.User, "somepass@34355", t, 200)
+	insertDeviceReg(reg, t, 200)
+	url := fmt.Sprintf("%s/users/%s/devices", testServer, reg.User)
+	req, _ := http.NewRequest("GET", url, nil)
+	resp, err := (&http.Client{}).Do(req)
+	assert.Nil(t, err, "Unexpected error in Do-ing the request, failed http request")
+	assert.Equal(t, 200, resp.StatusCode, "Unexpected response code when delDeviceReg")
+	defer resp.Body.Close()
+	target := []interface{}{}
+	if json.NewDecoder(resp.Body).Decode(&target) != nil {
+		// t.Error("Failed to decode the authentication response containing tokenss")
+		panic("TestUserDevices:Failed to unmarshall response body")
+	}
+	t.Log(target)
+}
 func TestDevices(t *testing.T) {
 	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
 	toks := authenticateUser(reg.User, "somepass@34355", t, 200)
@@ -378,28 +459,28 @@ func TestDevices(t *testing.T) {
 	delDeviceReg(reg.Serial, toks["auth"], t, 200)
 	delDeviceReg("dd03f4a2-5962-434c", toks["auth"], t, 404)
 
-	delUser(reg.User, toks["auth"], t, 200)
+	delUser(reg.User, toks["auth"], t, 403)
 }
 
 // TestUsrAccToDevices: this shall test all the user account to devices relation
 // When an account is deleted, the devices owned by the account are stripped off their registration and blacklisted
 // if the same device has to be re-deployed it has to be explicitly white listed by an admin
 func TestUsrAccToDevices(t *testing.T) {
-	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200)
-	toks := authenticateUser(reg.User, "somepass@34355", t, 200)
+	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 1, t, 200)
+	toks := authenticateUser("kneerunjun@gmail.com", "106456!41993", t, 200)
 	insertDeviceReg(reg, t, 200)
 	lockDeviceReg(reg.Serial, toks["auth"], t, 200)
 	unlockDeviceReg(reg.Serial, toks["auth"], t, 200)
 
 	delUser(reg.User, toks["auth"], t, 200)
 	insertDeviceReg(reg, t, 404)                                                                // user account is not found, hence would be rejected
-	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 2, t, 200) // so we try to register the account again
-	toks = authenticateUser(reg.User, "somepass@34355", t, 200)
-	// but then the device is still blacklisted
-	// so we then unblack the device
+	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 1, t, 200) // so we try to register the account again
+	// toks = authenticateUser(reg.User, "somepass@34355", t, 200)
+	// // but then the device is still blacklisted
+	// // so we then unblack the device
 	insertDeviceReg(reg, t, 403) // before unblacking the device inserting the device again is not possible
 	blackUnblack(reg.Serial, toks["auth"], false, t, 200)
 	insertDeviceReg(reg, t, 200) // same device registration now can be pushed
-	// and then again everything is deleted
+	// // and then again everything is deleted
 	delUser(reg.User, toks["auth"], t, 200)
 }
