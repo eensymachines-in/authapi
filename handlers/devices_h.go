@@ -10,8 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// HandlDevices : handler for the route /devices
-func HandlDevices(c *gin.Context) {
+// HandlDevice : handles all the requests pertaining to a single device
+func HandlDevice(c *gin.Context) {
 	closeSession, _ := c.Get("close_session")
 	defer closeSession.(func())() // this closes the db session when done
 	val, _ := c.Get("devreg")
@@ -75,7 +75,23 @@ func HandlDevices(c *gin.Context) {
 		}
 		c.AbortWithStatus(http.StatusOK)
 		return
-	} else if c.Request.Method == "POST" {
+	} else if c.Request.Method == "DELETE" {
+		if ex.DigestErr(devregColl.RemoveDeviceReg(serial), c) != 0 {
+			return
+		}
+	}
+}
+
+// HandlDevices : handler for the route /devices
+func HandlDevices(c *gin.Context) {
+	closeSession, _ := c.Get("close_session")
+	defer closeSession.(func())() // this closes the db session when done
+	val, _ := c.Get("devreg")
+	devregColl := val.(*auth.DeviceRegColl)
+	val, _ = c.Get("devblacklist")
+	blcklColl := val.(*auth.BlacklistColl)
+	// serial := c.Param("serial")
+	if c.Request.Method == "POST" {
 		devReg := &auth.DeviceReg{}
 		if err := c.ShouldBindJSON(devReg); err != nil {
 			ex.DigestErr(ex.NewErr(&ex.ErrJSONBind{}, fmt.Errorf("handlDevices: Failed to bind device registration from request body %s", err), fmt.Sprintf("Failed to read device registration details, kindly check and send again"), "HandlDevices/PATCH"), c)
@@ -95,10 +111,15 @@ func HandlDevices(c *gin.Context) {
 		}
 		c.AbortWithStatus(http.StatusOK)
 		return
-	} else if c.Request.Method == "DELETE" {
-		if ex.DigestErr(devregColl.RemoveDeviceReg(serial), c) != 0 {
+	} else if c.Request.Method == "GET" {
+		if c.Query("black") != "" {
+			// when the client code is requesting all the blacklisted devices
+			blacked := []auth.Blacklist{}
+			if ex.DigestErr(blcklColl.Enlist(&blacked), c) != 0 {
+				return
+			}
+			c.JSON(http.StatusOK, blacked)
 			return
 		}
 	}
-
 }

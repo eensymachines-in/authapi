@@ -473,6 +473,24 @@ func TestUsrAccToDevices(t *testing.T) {
 	unlockDeviceReg(reg.Serial, toks["auth"], t, 200)
 
 	delUser(reg.User, toks["auth"], t, 200)
+	// Now that the user account has been removed, the device would be blacklisted
+	// lets try to enlist the blacklisted devices
+
+	url := fmt.Sprintf("%s/devices?black=true", testServer)
+	req, _ := http.NewRequest("GET", url, nil)
+	resp, _ := (&http.Client{}).Do(req)
+	assert.Equal(t, 200, resp.StatusCode, "Unexpected response code when enlisting the blacked devices")
+	if resp.StatusCode == 200 {
+		// Only if it is expected to be a 200 ok authentication
+		defer resp.Body.Close()
+		target := []auth.Blacklist{}
+		if json.NewDecoder(resp.Body).Decode(&target) != nil {
+			t.Error("Failed to decode the authentication response containing tokenss")
+		}
+		t.Log("below are the black listed devices ...")
+		t.Log(target)
+		return
+	}
 	insertDeviceReg(reg, t, 404)                                                                // user account is not found, hence would be rejected
 	insertUser(reg.User, "somepass@34355", "Cock block", "In da hood", "+915534554", 1, t, 200) // so we try to register the account again
 	// toks = authenticateUser(reg.User, "somepass@34355", t, 200)

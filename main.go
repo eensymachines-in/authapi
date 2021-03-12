@@ -112,11 +112,13 @@ func main() {
 	devices := r.Group("/devices")
 	devices.Use(lclDbConnect())
 
-	devices.POST("", handlers.HandlDevices)        // when creating new registrations
-	devices.GET("/:serial", handlers.HandlDevices) // when getting existing registrations
+	devices.GET("", handlers.HandlDevices)  // filtered list of devices /devices?black=true
+	devices.POST("", handlers.HandlDevices) // when creating new registrations
+
+	devices.GET("/:serial", handlers.HandlDevice) // when getting existing registrations
 	// When the device registration has to be modified or deleted
-	devices.PATCH("/:serial", tokenParse(), verifyRole(1), handlers.HandlDevices)
-	devices.DELETE("/:serial", tokenParse(), verifyRole(2), handlers.HandlDevices)
+	devices.PATCH("/:serial", tokenParse(), verifyRole(1), handlers.HandlDevice)
+	devices.DELETE("/:serial", tokenParse(), verifyRole(2), handlers.HandlDevice)
 
 	// Users group
 	users := r.Group("/users")
