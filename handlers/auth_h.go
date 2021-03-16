@@ -114,6 +114,15 @@ func HandlAuth(c *gin.Context) {
 	if ex.DigestErr(tokCach.LoginUser(creds.Email, creds.Role, tokPair), c) != 0 {
 		return
 	}
-	c.JSON(http.StatusOK, tokPair.MakeMarshalable(os.Getenv("AUTH_SECRET"), os.Getenv("REFR_SECRET")))
+	// ahead of issue #24 - the authentication api needs to send the tokens and the account information
+	tokPayload := tokPair.MakeMarshalable(os.Getenv("AUTH_SECRET"), os.Getenv("REFR_SECRET"))
+	payload := map[string]interface{}{
+		"auth":  tokPayload.(map[string]string)["auth"],
+		"refr":  tokPayload.(map[string]string)["refr"],
+		"email": details.Email,
+		"role":  details.Role,
+		"name":  details.Name,
+	}
+	c.JSON(http.StatusOK, payload)
 	return
 }
